@@ -10,7 +10,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/gowasp/corepb"
-	"github.com/gowasp/pact"
+	"github.com/gowasp/pkg/pact"
 	"github.com/gowasp/wasp/callback"
 	"go.uber.org/zap"
 )

@@ -10,8 +10,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gowasp/corepb"
-	"github.com/gowasp/pact"
 	"github.com/gowasp/pkg"
+	"github.com/gowasp/pkg/pact"
 	"github.com/gowasp/wasp/callback"
 	"go.uber.org/zap"
 )
@@ -134,6 +134,7 @@ func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
 		if callback.Callback.Pong != nil {
 			callback.Callback.Pong(conn.SID())
 		}
+	case pact.SUBSCRIBE:
 	case pact.PVTPUBLISH:
 		w.pvtPubHandle(conn, body)
 	default:
@@ -199,6 +200,10 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 		zap.L().Warn(err.Error())
 		return
 	}
+
+}
+
+func (w *Wasp) subHandle() {
 
 }
 
