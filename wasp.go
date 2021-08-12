@@ -205,18 +205,18 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 type ctxString string
 
 const (
-	_CTXID ctxString = "ctxID"
+	_CTXSEQ ctxString = "ctxSeq"
 )
 
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
-	id, topicID, b := pact.PVTPUBLISH.PvtDecode(body)
+	seq, topicID, b := pact.PVTPUBLISH.PvtDecode(body)
 
-	ctx := context.WithValue(context.Background(), _CTXID, id)
+	ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
 	if v := w.private.Get(topicID); v != nil {
 		if err := v(ctx, b); err == nil {
-			pvtPubAck := append([]byte{byte(pact.PVTPUBACK)}, pact.EncodeVarint(id)...)
+			pvtPubAck := append([]byte{byte(pact.PVTPUBACK)}, pact.EncodeVarint(seq)...)
 			if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
-				callback.Callback.PvtPubAckFail(id, err)
+				callback.Callback.PvtPubAckFail(seq, err)
 			}
 		}
 	} else {
@@ -232,5 +232,5 @@ func (w *Wasp) Private() *pkg.Private {
 }
 
 func GetCtxID(ctx context.Context) int {
-	return ctx.Value(_CTXID).(int)
+	return ctx.Value(_CTXSEQ).(int)
 }
