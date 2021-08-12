@@ -11,6 +11,7 @@ import (
 	"github.com/gowasp/corepb"
 	"github.com/gowasp/pact"
 	"github.com/gowasp/wasp/callback"
+	"go.uber.org/zap"
 )
 
 // type Test struct{}
@@ -367,4 +368,10 @@ func TestWasp_connect(t *testing.T) {
 func TestWasp_Private(t *testing.T) {
 	w := Default()
 	w.Private()
+}
+
+func TestWasp_Run(t *testing.T) {
+	l, _ := zap.NewDevelopment()
+	zap.ReplaceGlobals(l)
+	Default().Run()
 }

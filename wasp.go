@@ -170,20 +170,20 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 
 	if callback.Callback.Connect == nil {
 		connMap.Store(conn.SID(), conn)
-		return
-	}
+	} else {
+		err := callback.Callback.Connect(conn.RemoteAddr().String(), pb)
+		if err != nil {
+			conn.SetSID("")
+			return
+		}
 
-	err := callback.Callback.Connect(conn.RemoteAddr().String(), pb)
-	if err != nil {
-		conn.SetSID("")
-		return
-	}
+		connMap.Store(conn.SID(), conn)
 
-	connMap.Store(conn.SID(), conn)
+	}
 
 	pbAck := &corepb.ConnAck{
-		Code:     0,
-		Datetime: int32(time.Now().Unix()),
+		Code: 0,
+		Time: int32(time.Now().Unix()),
 	}
 
 	pbBody, err := proto.Marshal(pbAck)
