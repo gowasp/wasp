@@ -1,0 +1,11 @@
+syntax = "proto3";
+package corepb;
+
+option go_package = "corepb";
+
+message Connect {
+	string udid = 1;
+    string group = 2;
+	string username = 3;
+	string password = 4;
+}
