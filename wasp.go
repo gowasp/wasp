@@ -216,20 +216,21 @@ const (
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 	seq, topicID, b := pact.PVTPUBLISH.PvtDecode(body)
 
-	pvtPubAck := pact.PvtPubAckEncode(seq)
-
 	if v := w.private.Get(topicID); v != nil {
 		ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
 		if err := v(ctx, b); err != nil {
 			return
 		}
+
+		pvtPubAck := pact.PvtPubAckEncode(seq)
+		if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
+			callback.Callback.PvtPubAckFail(seq, err)
+		}
+
 	} else {
 		zap.S().Warnf("topicID %d was not found", topicID)
 	}
 
-	if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
-		callback.Callback.PvtPubAckFail(seq, err)
-	}
 }
 
 func (w *Wasp) Private() *pkg.Private {
