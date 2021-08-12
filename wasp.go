@@ -150,8 +150,8 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 		return
 	}
 
-	if pb.GetUdid() == "" || pb.GetPassword() == "" || pb.GetUsername() == "" {
-		zap.L().Error("Security parameter is empty")
+	if len(pb.GetUdid()) == 0 {
+		zap.L().Error("udid is empty")
 		conn.Close()
 		return
 	}
