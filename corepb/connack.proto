@@ -1,9 +1,0 @@
-syntax = "proto3";
-package corepb;
-
-option go_package = "corepb";
-
-message ConnAck {
-	int32 code = 1;
-    int32 datetime = 2;
-}

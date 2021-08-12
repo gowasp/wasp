@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gowasp/corepb"
 	"github.com/gowasp/wasp/callback"
-	"github.com/gowasp/wasp/corepb"
 	"github.com/gowasp/wasp/pkg"
 	"go.uber.org/zap"
 )
@@ -128,6 +128,10 @@ func (w *Wasp) pkgHandle(pt pkg.PkgType, conn *TCPConn, body []byte) {
 	switch pt {
 	case pkg.CONNECT:
 		w.connect(conn, body)
+	case pkg.PING:
+		if callback.Callback.Pong != nil {
+			callback.Callback.Pong(conn.SID())
+		}
 	case pkg.PVTPUBACK:
 		w.pvtPubAckHandle(conn, body)
 	default:

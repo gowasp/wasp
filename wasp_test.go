@@ -8,8 +8,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
+	"github.com/gowasp/corepb"
 	"github.com/gowasp/wasp/callback"
-	"github.com/gowasp/wasp/corepb"
 	"github.com/gowasp/wasp/pkg"
 )
 
