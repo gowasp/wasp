@@ -145,18 +145,6 @@ func (w *Wasp) handle(conn *TCPConn) {
 			}
 			break
 
-			// if offset < size {
-			// 	break
-			// } else if offset == size {
-			// 	w.typeHandle(pact.Type(code), conn, buf.Next(size))
-			// 	buf.Reset()
-			// 	offset, size, varintLen = 0, 0, 0
-			// 	code = 0
-			// } else {
-			// 	w.typeHandle(pact.Type(code), conn, buf.Next(size))
-			// 	offset, size, varintLen = 0, 0, 0
-			// 	code = 0
-			// }
 		}
 	}
 }
