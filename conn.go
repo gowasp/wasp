@@ -34,3 +34,25 @@ func (c *TCPConn) Password() string {
 func (c *TCPConn) Write(b []byte) (int, error) {
 	return c.TCPConn.Write(b)
 }
+
+type ConnInfo struct {
+	sid             string
+	username, group string
+	remoteAddr      string
+}
+
+func (c *ConnInfo) UDID() string {
+	return c.sid
+}
+
+func (c *ConnInfo) Group() string {
+	return c.group
+}
+
+func (c *ConnInfo) Username() string {
+	return c.username
+}
+
+func (c *ConnInfo) RemoteAddr() string {
+	return c.remoteAddr
+}

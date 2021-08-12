@@ -27,11 +27,16 @@ func SetReadTimeout(t time.Duration) {
 type Wasp struct {
 	readTimeout time.Duration
 	private     *pkg.Private
+
+	subMap *subMap
 }
 
 func Default() *Wasp {
 	return &Wasp{
 		readTimeout: readTimeout,
+		subMap: &subMap{
+			cache: make(map[string]map[string]*TCPConn),
+		},
 	}
 }
 
@@ -64,6 +69,13 @@ func (w *Wasp) Run(addr ...string) error {
 		go w.handle(&TCPConn{TCPConn: conn})
 	}
 
+}
+
+func (w *Wasp) Private() *pkg.Private {
+	if w.private == nil {
+		w.private = &pkg.Private{}
+	}
+	return w.private
 }
 
 func (w *Wasp) handle(conn *TCPConn) {
@@ -136,6 +148,8 @@ func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
 		}
 	case pact.SUBSCRIBE:
 		w.subHandle(conn, body)
+	case pact.PUBLISH:
+		w.pubHandle(conn, body)
 	case pact.PVTPUBLISH:
 		w.pvtPubHandle(conn, body)
 	default:
@@ -204,30 +218,6 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 
 }
 
-type ctxString string
-
-const (
-	_CTXSEQ       ctxString = "ctxSeq"
-	_CTXCONN_INFO ctxString = "ctxSub"
-)
-
-type ConnInfo struct {
-	sid             string
-	username, group string
-}
-
-func (c *ConnInfo) UDID() string {
-	return c.sid
-}
-
-func (c *ConnInfo) Group() string {
-	return c.group
-}
-
-func (c *ConnInfo) Username() string {
-	return c.username
-}
-
 func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
 	if callback.Callback.Subscribe != nil {
 		c := &ConnInfo{
@@ -241,8 +231,40 @@ func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
 	}
 }
 
-func GetCtxConnInfo(ctx context.Context) *ConnInfo {
-	return ctx.Value(_CTXCONN_INFO).(*ConnInfo)
+func (w *Wasp) pubHandle(conn *TCPConn, body []byte) {
+	seq, topic, body := pact.PubDecode(body)
+
+	if callback.Callback.PubData != nil {
+		ci := &ConnInfo{
+			sid:        conn.SID(),
+			username:   conn.Username(),
+			group:      conn.Group(),
+			remoteAddr: conn.RemoteAddr().String(),
+		}
+
+		go callback.Callback.PubData(setCtx(ci, seq, topic), body)
+	}
+
+	conns := w.subMap.gets(topic)
+	if conns == nil {
+		zap.L().Warn("topic not found " + topic)
+		return
+	}
+
+	for _, v := range conns {
+		if _, err := v.Write(pact.PubEncode(seq, topic, body)); err != nil {
+			zap.L().Error(err.Error())
+			if callback.Callback.PubFail != nil {
+				ci := &ConnInfo{
+					sid:        conn.SID(),
+					username:   conn.Username(),
+					group:      conn.Group(),
+					remoteAddr: conn.RemoteAddr().String(),
+				}
+				callback.Callback.PubFail(setCtx(ci, seq, topic), err, body)
+			}
+		}
+	}
 }
 
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
@@ -250,9 +272,10 @@ func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 
 	if v := w.private.Get(topicID); v != nil {
 		c := &ConnInfo{
-			sid:      conn.SID(),
-			username: conn.Username(),
-			group:    conn.Group(),
+			sid:        conn.SID(),
+			username:   conn.Username(),
+			group:      conn.Group(),
+			remoteAddr: conn.RemoteAddr().String(),
 		}
 		ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
 		ctx = context.WithValue(ctx, _CTXCONN_INFO, c)
@@ -271,13 +294,25 @@ func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 
 }
 
-func GetCtxSeq(ctx context.Context) int {
+type ctxString string
+
+const (
+	_CTXSEQ       ctxString = "ctxSeq"
+	_CTXTOPIC     ctxString = "ctxTopic"
+	_CTXCONN_INFO ctxString = "ctxConnInfo"
+)
+
+func setCtx(ci *ConnInfo, seq int, topic string) context.Context {
+	ctx := context.WithValue(context.Background(), _CTXCONN_INFO, ci)
+	ctx = context.WithValue(ctx, _CTXSEQ, seq)
+	ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+	return ctx
+}
+
+func CtxSeq(ctx context.Context) int {
 	return ctx.Value(_CTXSEQ).(int)
 }
 
-func (w *Wasp) Private() *pkg.Private {
-	if w.private == nil {
-		w.private = &pkg.Private{}
-	}
-	return w.private
+func CtxConnInfo(ctx context.Context) *ConnInfo {
+	return ctx.Value(_CTXCONN_INFO).(*ConnInfo)
 }
