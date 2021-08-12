@@ -9,8 +9,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/gowasp/corepb"
+	"github.com/gowasp/pact"
 	"github.com/gowasp/wasp/callback"
-	"github.com/gowasp/wasp/pkg"
 )
 
 // type Test struct{}
@@ -332,7 +332,7 @@ import (
 // }
 
 func TestWasp_connect(t *testing.T) {
-	var a pkg.PkgType = 1
+	var a pact.Type = 1
 	aa := fmt.Sprint(a)
 	println(aa)
 	callback.Callback.Connect = func(s string, c *corepb.Connect) error {
@@ -360,7 +360,7 @@ func TestWasp_connect(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	conn.Write(pkg.CONNECT.Encode(body))
+	conn.Write(pact.CONNECT.Encode(body))
 	select {}
 }
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gowasp/corepb"
+	"github.com/gowasp/pact"
 	"github.com/gowasp/wasp/callback"
-	"github.com/gowasp/wasp/pkg"
 	"go.uber.org/zap"
 )
 
@@ -94,12 +94,12 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 		if offset == 0 {
 			code = buf.Bytes()[0]
-			size, varintLen = pkg.DecodeVarint(buf.Bytes()[1:])
+			size, varintLen = pact.DecodeVarint(buf.Bytes()[1:])
 			offset = n - 1 - varintLen
 			buf.Next(1 + varintLen)
 
 			if size+varintLen+1 <= n {
-				w.pkgHandle(pkg.PkgType(code), conn, buf.Next(size))
+				w.typeHandle(pact.Type(code), conn, buf.Next(size))
 				buf.Reset()
 				offset, size, varintLen = 0, 0, 0
 				code = 0
@@ -112,30 +112,30 @@ func (w *Wasp) handle(conn *TCPConn) {
 		if offset < size {
 			continue
 		} else if offset == size {
-			w.pkgHandle(pkg.PkgType(code), conn, buf.Next(size))
+			w.typeHandle(pact.Type(code), conn, buf.Next(size))
 			buf.Reset()
 			offset, size, varintLen = 0, 0, 0
 			code = 0
 		} else {
-			w.pkgHandle(pkg.PkgType(code), conn, buf.Next(size))
+			w.typeHandle(pact.Type(code), conn, buf.Next(size))
 			offset, size, varintLen = 0, 0, 0
 			code = 0
 		}
 	}
 }
 
-func (w *Wasp) pkgHandle(pt pkg.PkgType, conn *TCPConn, body []byte) {
-	switch pt {
-	case pkg.CONNECT:
+func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
+	switch t {
+	case pact.CONNECT:
 		w.connect(conn, body)
-	case pkg.PING:
+	case pact.PING:
 		if callback.Callback.Pong != nil {
 			callback.Callback.Pong(conn.SID())
 		}
-	case pkg.PVTPUBACK:
+	case pact.PVTPUBACK:
 		w.pvtPubAckHandle(conn, body)
 	default:
-		zap.L().Error("Unsupported PkgType " + fmt.Sprint(pt))
+		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
 	}
 }
 
@@ -192,7 +192,7 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 		return
 	}
 
-	if _, err := conn.Write(pkg.CONNACK.Encode(pbBody)); err != nil {
+	if _, err := conn.Write(pact.CONNACK.Encode(pbBody)); err != nil {
 		conn.Close()
 		zap.L().Warn(err.Error())
 		return
@@ -201,7 +201,7 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) pvtPubAckHandle(conn *TCPConn, body []byte) {
-	t, topicID, b := pkg.PVTPUBACK.PvtDecode(body)
+	t, topicID, b := pact.PVTPUBACK.PvtDecode(body)
 	if v, ok := w.private.subMap.Load(topicID); ok {
 		v.(pvtSubFunc)(t, conn, b)
 	} else {
