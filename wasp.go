@@ -151,8 +151,8 @@ func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
 	case pact.CONNECT:
 		w.connect(conn, body)
 	case pact.PING:
-		if callback.Callback.Pong != nil {
-			callback.Callback.Pong(conn.SID())
+		if callback.Callback.Ping != nil {
+			callback.Callback.Ping(conn.SID())
 		}
 	case pact.SUBSCRIBE:
 		w.subHandle(conn, body)
