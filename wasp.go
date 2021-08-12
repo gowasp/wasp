@@ -231,6 +231,6 @@ func (w *Wasp) Private() *pkg.Private {
 	return w.private
 }
 
-func GetCtxID(ctx context.Context) int {
+func GetCtxSeq(ctx context.Context) int {
 	return ctx.Value(_CTXSEQ).(int)
 }
