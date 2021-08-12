@@ -7,6 +7,8 @@ type callback struct {
 	Connect func(string, *corepb.Connect) error
 	Close   func(string) error
 	Pong    func(string)
+
+	PvtPubAckFail func(int, error)
 }
 
 var (

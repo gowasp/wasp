@@ -2,6 +2,7 @@ package wasp
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gowasp/corepb"
 	"github.com/gowasp/pact"
+	"github.com/gowasp/pkg"
 	"github.com/gowasp/wasp/callback"
 	"go.uber.org/zap"
 )
@@ -24,7 +26,7 @@ func SetReadTimeout(t time.Duration) {
 
 type Wasp struct {
 	readTimeout time.Duration
-	private     *private
+	private     *pkg.Private
 }
 
 func Default() *Wasp {
@@ -132,8 +134,8 @@ func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
 		if callback.Callback.Pong != nil {
 			callback.Callback.Pong(conn.SID())
 		}
-	case pact.PVTPUBACK:
-		w.pvtPubAckHandle(conn, body)
+	case pact.PVTPUBLISH:
+		w.pvtPubHandle(conn, body)
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
 	}
@@ -200,18 +202,35 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 
 }
 
-func (w *Wasp) pvtPubAckHandle(conn *TCPConn, body []byte) {
-	t, topicID, b := pact.PVTPUBACK.PvtDecode(body)
-	if v, ok := w.private.subMap.Load(topicID); ok {
-		v.(pvtSubFunc)(t, conn, b)
+type ctxString string
+
+const (
+	_CTXID ctxString = "ctxID"
+)
+
+func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
+	id, topicID, b := pact.PVTPUBLISH.PvtDecode(body)
+
+	ctx := context.WithValue(context.Background(), _CTXID, id)
+	if v := w.private.Get(topicID); v != nil {
+		if err := v(ctx, b); err == nil {
+			pvtPubAck := append([]byte{byte(pact.PVTPUBACK)}, pact.EncodeVarint(id)...)
+			if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
+				callback.Callback.PvtPubAckFail(id, err)
+			}
+		}
 	} else {
 		zap.S().Warnf("topicID %d was not found", topicID)
 	}
 }
 
-func (w *Wasp) Private() *private {
+func (w *Wasp) Private() *pkg.Private {
 	if w.private == nil {
-		w.private = &private{}
+		w.private = &pkg.Private{}
 	}
 	return w.private
+}
+
+func GetCtxID(ctx context.Context) int {
+	return ctx.Value(_CTXID).(int)
 }
