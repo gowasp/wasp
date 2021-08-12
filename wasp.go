@@ -85,7 +85,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 	var (
 		code byte
 
-		offset, size, varintLen int
+		size, varintLen int
 	)
 	for {
 
@@ -114,34 +114,49 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 		buf.Write(body[:n])
 
-		if offset == 0 {
-			code = buf.Bytes()[0]
-			size, varintLen = pact.DecodeVarint(buf.Bytes()[1:])
-			offset = n - 1 - varintLen
-			buf.Next(1 + varintLen)
-
-			if size+varintLen+1 <= n {
-				w.typeHandle(pact.Type(code), conn, buf.Next(size))
-				buf.Reset()
-				offset, size, varintLen = 0, 0, 0
-				code = 0
+		for {
+			if buf.Len() == 0 {
+				break
 			}
-			continue
-		}
+			if code == 0 {
+				code = buf.Next(1)[0]
+			}
 
-		offset += n
+			if code == byte(pact.PING) {
+				w.typeHandle(pact.Type(code), conn, nil)
+				code = 0
+				continue
+			}
 
-		if offset < size {
-			continue
-		} else if offset == size {
-			w.typeHandle(pact.Type(code), conn, buf.Next(size))
-			buf.Reset()
-			offset, size, varintLen = 0, 0, 0
-			code = 0
-		} else {
-			w.typeHandle(pact.Type(code), conn, buf.Next(size))
-			offset, size, varintLen = 0, 0, 0
-			code = 0
+			size, varintLen = pact.DecodeVarint(buf.Bytes()[0:])
+			buf.Next(varintLen)
+
+			if size+varintLen+1 == n {
+				w.typeHandle(pact.Type(code), conn, buf.Next(size))
+				size, varintLen = 0, 0
+				code = 0
+				break
+			}
+
+			if size+varintLen+1 < n {
+				w.typeHandle(pact.Type(code), conn, buf.Next(size))
+				code = 0
+				continue
+			}
+			break
+
+			// if offset < size {
+			// 	break
+			// } else if offset == size {
+			// 	w.typeHandle(pact.Type(code), conn, buf.Next(size))
+			// 	buf.Reset()
+			// 	offset, size, varintLen = 0, 0, 0
+			// 	code = 0
+			// } else {
+			// 	w.typeHandle(pact.Type(code), conn, buf.Next(size))
+			// 	offset, size, varintLen = 0, 0, 0
+			// 	code = 0
+			// }
 		}
 	}
 }

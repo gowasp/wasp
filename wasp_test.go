@@ -383,3 +383,22 @@ func TestWasp_Run(t *testing.T) {
 	zap.ReplaceGlobals(l)
 	Default().Run()
 }
+
+func TestWasp_Publish(t *testing.T) {
+	l, _ := zap.NewDevelopment()
+	zap.ReplaceGlobals(l)
+
+	callback.Callback.Connect = func(s string, c *corepb.Connect) error {
+		zap.L().Debug("connect", zap.Reflect("result", c))
+		return nil
+	}
+
+	callback.Callback.Ping = func(s string) {
+		zap.L().Debug(s)
+	}
+
+	callback.Callback.Subscribe = func(c context.Context, s string) {
+		zap.L().Debug(s)
+	}
+	Default().Run()
+}

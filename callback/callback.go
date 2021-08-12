@@ -10,7 +10,7 @@ type callback struct {
 	// string: remote_addr.
 	Connect func(string, *corepb.Connect) error
 	Close   func(string) error
-	Pong    func(string)
+	Ping    func(string)
 
 	PvtPubAckFail func(int, error)
 
