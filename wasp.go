@@ -98,7 +98,15 @@ func (w *Wasp) handle(conn *TCPConn) {
 		n, err := conn.Read(body)
 		if err != nil {
 			conn.Close()
-			if len(conn.SID()) != 0 && callback.Callback.Close != nil {
+			if len(conn.SID()) == 0 {
+				return
+			}
+
+			connMap.Delete(conn.SID())
+
+			w.subMap.delete(conn.SID())
+
+			if callback.Callback.Close != nil {
 				callback.Callback.Close(conn.SID())
 			}
 			return
@@ -219,6 +227,8 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
+	w.subMap.put(string(body), conn.SID(), conn)
+
 	if callback.Callback.Subscribe != nil {
 		c := &ConnInfo{
 			sid:      conn.SID(),
