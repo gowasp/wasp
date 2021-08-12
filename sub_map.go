@@ -35,3 +35,21 @@ func (s *subMap) gets(topic string) []*TCPConn {
 
 	return conns
 }
+
+func (s *subMap) delete(sid string) {
+	s.rwmutex.Lock()
+	defer s.rwmutex.Unlock()
+
+	if s.cache == nil {
+		return
+	}
+
+	for _, v := range s.cache {
+		if v[sid] == nil {
+			continue
+		}
+
+		delete(v, sid)
+
+	}
+}
