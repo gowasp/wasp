@@ -211,8 +211,8 @@ const (
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 	seq, topicID, b := pact.PVTPUBLISH.PvtDecode(body)
 
-	ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
 	if v := w.private.Get(topicID); v != nil {
+		ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
 		if err := v(ctx, b); err == nil {
 			pvtPubAck := append([]byte{byte(pact.PVTPUBACK)}, pact.EncodeVarint(seq)...)
 			if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
