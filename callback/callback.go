@@ -1,6 +1,10 @@
 package callback
 
-import "github.com/gowasp/corepb"
+import (
+	"context"
+
+	"github.com/gowasp/corepb"
+)
 
 type callback struct {
 	// string: remote_addr.
@@ -9,6 +13,8 @@ type callback struct {
 	Pong    func(string)
 
 	PvtPubAckFail func(int, error)
+
+	Subscribe func(context.Context, string)
 }
 
 var (

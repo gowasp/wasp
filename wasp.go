@@ -204,21 +204,58 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 
 }
 
-func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
-
-}
-
 type ctxString string
 
 const (
-	_CTXSEQ ctxString = "ctxSeq"
+	_CTXSEQ       ctxString = "ctxSeq"
+	_CTXCONN_INFO ctxString = "ctxSub"
 )
+
+type ConnInfo struct {
+	sid             string
+	username, group string
+}
+
+func (c *ConnInfo) UDID() string {
+	return c.sid
+}
+
+func (c *ConnInfo) Group() string {
+	return c.group
+}
+
+func (c *ConnInfo) Username() string {
+	return c.username
+}
+
+func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
+	if callback.Callback.Subscribe != nil {
+		c := &ConnInfo{
+			sid:      conn.SID(),
+			username: conn.Username(),
+			group:    conn.Group(),
+		}
+
+		ctx := context.WithValue(context.Background(), _CTXCONN_INFO, c)
+		callback.Callback.Subscribe(ctx, string(body))
+	}
+}
+
+func GetCtxConnInfo(ctx context.Context) *ConnInfo {
+	return ctx.Value(_CTXCONN_INFO).(*ConnInfo)
+}
 
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 	seq, topicID, b := pact.PvtPubDecode(body)
 
 	if v := w.private.Get(topicID); v != nil {
+		c := &ConnInfo{
+			sid:      conn.SID(),
+			username: conn.Username(),
+			group:    conn.Group(),
+		}
 		ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
+		ctx = context.WithValue(ctx, _CTXCONN_INFO, c)
 		if err := v(ctx, b); err != nil {
 			return
 		}
@@ -234,13 +271,13 @@ func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 
 }
 
+func GetCtxSeq(ctx context.Context) int {
+	return ctx.Value(_CTXSEQ).(int)
+}
+
 func (w *Wasp) Private() *pkg.Private {
 	if w.private == nil {
 		w.private = &pkg.Private{}
 	}
 	return w.private
-}
-
-func GetCtxSeq(ctx context.Context) int {
-	return ctx.Value(_CTXSEQ).(int)
 }
