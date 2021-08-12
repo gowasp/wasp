@@ -135,6 +135,7 @@ func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
 			callback.Callback.Pong(conn.SID())
 		}
 	case pact.SUBSCRIBE:
+		w.subHandle(conn, body)
 	case pact.PVTPUBLISH:
 		w.pvtPubHandle(conn, body)
 	default:
@@ -203,7 +204,7 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 
 }
 
-func (w *Wasp) subHandle() {
+func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
 
 }
 
@@ -214,7 +215,7 @@ const (
 )
 
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
-	seq, topicID, b := pact.PVTPUBLISH.PvtDecode(body)
+	seq, topicID, b := pact.PvtPubDecode(body)
 
 	if v := w.private.Get(topicID); v != nil {
 		ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
