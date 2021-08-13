@@ -2,13 +2,11 @@ package callback
 
 import (
 	"context"
-
-	"github.com/gowasp/corepb"
 )
 
 type callback struct {
 	// string: remote_addr.
-	Connect func(string, *corepb.Connect) error
+	Connect func(context.Context) error
 	Close   func(string) error
 	Ping    func(string)
 

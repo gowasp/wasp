@@ -19,11 +19,6 @@ func TestWasp_connect(t *testing.T) {
 	var a pkg.Fixed = 1
 	aa := fmt.Sprint(a)
 	println(aa)
-	callback.Callback.Connect = func(s string, c *corepb.Connect) error {
-		t.Logf("%s\n", s)
-		t.Logf("%+v\n", c)
-		return nil
-	}
 	go Default().Run()
 	time.Sleep(1 * time.Second)
 	conn, err := net.Dial("tcp", "localhost:6000")
@@ -69,11 +64,6 @@ func TestWasp_Run(t *testing.T) {
 func TestWasp_Publish(t *testing.T) {
 	l, _ := zap.NewDevelopment()
 	zap.ReplaceGlobals(l)
-
-	callback.Callback.Connect = func(s string, c *corepb.Connect) error {
-		zap.L().Debug("connect", zap.Reflect("result", c))
-		return nil
-	}
 
 	callback.Callback.Ping = func(s string) {
 		zap.L().Debug(s)

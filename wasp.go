@@ -199,7 +199,15 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 	if callback.Callback.Connect == nil {
 		connMap.Store(conn.SID(), conn)
 	} else {
-		err := callback.Callback.Connect(conn.RemoteAddr().String(), pb)
+		c := &ConnInfo{
+			sid:        conn.SID(),
+			username:   conn.Username(),
+			group:      conn.Group(),
+			remoteAddr: conn.RemoteAddr().String(),
+		}
+
+		ctx := context.WithValue(context.Background(), _CTXCONN_INFO, c)
+		err := callback.Callback.Connect(ctx)
 		if err != nil {
 			conn.SetSID("")
 			return
