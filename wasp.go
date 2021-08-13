@@ -85,6 +85,8 @@ func (w *Wasp) handle(conn *TCPConn) {
 		code byte
 
 		size, varintLen int
+
+		ctx = context.WithValue(context.Background(), _CTXPEER, &peer{})
 	)
 	for {
 
@@ -122,7 +124,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 			}
 
 			if code == byte(pkg.FIXED_PING) {
-				w.typeHandle(pkg.Fixed(code), conn, nil)
+				w.typeHandle(ctx, conn, pkg.Fixed(code), nil)
 				code = 0
 				continue
 			}
@@ -131,14 +133,14 @@ func (w *Wasp) handle(conn *TCPConn) {
 			buf.Next(varintLen)
 
 			if size+varintLen+1 == n {
-				w.typeHandle(pkg.Fixed(code), conn, buf.Next(size))
+				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
 				size, varintLen = 0, 0
 				code = 0
 				break
 			}
 
 			if size+varintLen+1 < n {
-				w.typeHandle(pkg.Fixed(code), conn, buf.Next(size))
+				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
 				code = 0
 				continue
 			}
@@ -148,20 +150,20 @@ func (w *Wasp) handle(conn *TCPConn) {
 	}
 }
 
-func (w *Wasp) typeHandle(t pkg.Fixed, conn *TCPConn, body []byte) {
+func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body []byte) {
 	switch t {
 	case pkg.FIXED_CONNECT:
-		w.connect(conn, body)
+		w.connect(ctx, conn, body)
 	case pkg.FIXED_PING:
 		if callback.Callback.Ping != nil {
 			callback.Callback.Ping(conn.SID())
 		}
 	case pkg.FIXED_SUBSCRIBE:
-		w.subHandle(conn, body)
+		w.subHandle(ctx, conn, body)
 	case pkg.FIXED_PUBLISH:
-		w.pubHandle(conn, body)
+		w.pubHandle(ctx, conn, body)
 	case pkg.FIXED_PVTPUBLISH:
-		w.pvtPubHandle(conn, body)
+		w.pvtPubHandle(ctx, conn, body)
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
 	}
@@ -171,7 +173,7 @@ var (
 	connMap sync.Map
 )
 
-func (w *Wasp) connect(conn *TCPConn, body []byte) {
+func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 	pb := &corepb.Connect{}
 	if err := proto.Unmarshal(body, pb); err != nil {
 		zap.L().Error(err.Error())
@@ -190,26 +192,24 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 		zap.L().Warn("Old connection will be closed", zap.String("sid", oldConn.SID()),
 			zap.String("remote_addr", oldConn.RemoteAddr().String()),
 		)
-		oldConn.SetSID("")
+		oldConn.sid = ""
 		oldConn.Close()
 	}
 
-	conn.SetSID(pb.GetUdid())
+	conn.sid = pb.GetUdid()
 
 	if callback.Callback.Connect == nil {
 		connMap.Store(conn.SID(), conn)
 	} else {
-		c := &ConnInfo{
-			sid:        conn.SID(),
-			username:   conn.Username(),
-			group:      conn.Group(),
-			remoteAddr: conn.RemoteAddr().String(),
-		}
+		pr := ctx.Value(_CTXPEER).(*peer)
+		pr.sid = conn.SID()
+		pr.username = pb.Username
+		pr.group = pb.Group
+		pr.username = pb.Username
 
-		ctx := context.WithValue(context.Background(), _CTXCONN_INFO, c)
-		err := callback.Callback.Connect(ctx)
+		err := callback.Callback.Connect(ctx, pb)
 		if err != nil {
-			conn.SetSID("")
+			conn.sid = ""
 			return
 		}
 
@@ -236,33 +236,21 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 
 }
 
-func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
+func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	w.subMap.put(string(body), conn.SID(), conn)
 
 	if callback.Callback.Subscribe != nil {
-		c := &ConnInfo{
-			sid:      conn.SID(),
-			username: conn.Username(),
-			group:    conn.Group(),
-		}
-
-		ctx := context.WithValue(context.Background(), _CTXCONN_INFO, c)
 		callback.Callback.Subscribe(ctx, string(body))
 	}
 }
 
-func (w *Wasp) pubHandle(conn *TCPConn, body []byte) {
+func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	seq, topic, body := pkg.PubDecode(body)
 
 	if callback.Callback.PubData != nil {
-		ci := &ConnInfo{
-			sid:        conn.SID(),
-			username:   conn.Username(),
-			group:      conn.Group(),
-			remoteAddr: conn.RemoteAddr().String(),
-		}
-
-		go callback.Callback.PubData(setCtx(ci, seq, topic), body)
+		ctx = context.WithValue(ctx, _CTXSEQ, seq)
+		ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+		go callback.Callback.PubData(ctx, body)
 	}
 
 	conns := w.subMap.gets(topic)
@@ -275,30 +263,20 @@ func (w *Wasp) pubHandle(conn *TCPConn, body []byte) {
 		if _, err := v.Write(pkg.PubEncode(seq, topic, body)); err != nil {
 			zap.L().Error(err.Error())
 			if callback.Callback.PubFail != nil {
-				ci := &ConnInfo{
-					sid:        conn.SID(),
-					username:   conn.Username(),
-					group:      conn.Group(),
-					remoteAddr: conn.RemoteAddr().String(),
-				}
-				callback.Callback.PubFail(setCtx(ci, seq, topic), err, body)
+				ctx = context.WithValue(ctx, _CTXSEQ, seq)
+				ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+				callback.Callback.PubFail(ctx, err, body)
 			}
 		}
 	}
 }
 
-func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
+func (w *Wasp) pvtPubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	seq, topicID, b := pkg.PvtPubDecode(body)
 
 	if v := w.private.Get(topicID); v != nil {
-		c := &ConnInfo{
-			sid:        conn.SID(),
-			username:   conn.Username(),
-			group:      conn.Group(),
-			remoteAddr: conn.RemoteAddr().String(),
-		}
-		ctx := context.WithValue(context.Background(), _CTXSEQ, seq)
-		ctx = context.WithValue(ctx, _CTXCONN_INFO, c)
+		ctx = context.WithValue(ctx, _CTXSEQ, seq)
+		ctx = context.WithValue(ctx, _CTXTOPIC, topicID)
 		if err := v(ctx, b); err != nil {
 			return
 		}
@@ -317,22 +295,26 @@ func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 type ctxString string
 
 const (
-	_CTXSEQ       ctxString = "ctxSeq"
-	_CTXTOPIC     ctxString = "ctxTopic"
-	_CTXCONN_INFO ctxString = "ctxConnInfo"
+	_CTXSEQ   ctxString = "ctxSeq"
+	_CTXTOPIC ctxString = "ctxTopic"
+	_CTXPEER  ctxString = "ctxPeer"
 )
 
-func setCtx(ci *ConnInfo, seq int, topic string) context.Context {
-	ctx := context.WithValue(context.Background(), _CTXCONN_INFO, ci)
-	ctx = context.WithValue(ctx, _CTXSEQ, seq)
-	ctx = context.WithValue(ctx, _CTXTOPIC, topic)
-	return ctx
-}
+//func setCtx(ci *ConnInfo, seq int, topic string) context.Context {
+//	ctx := context.WithValue(context.Background(), _CTXCONN_INFO, ci)
+//	ctx = context.WithValue(ctx, _CTXSEQ, seq)
+//	ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+//	return ctx
+//}
 
 func CtxSeq(ctx context.Context) int {
 	return ctx.Value(_CTXSEQ).(int)
 }
 
-func CtxConnInfo(ctx context.Context) *ConnInfo {
-	return ctx.Value(_CTXCONN_INFO).(*ConnInfo)
+func CtxPeer(ctx context.Context) *peer {
+	return ctx.Value(_CTXPEER).(*peer)
+}
+
+func CtxTopic(ctx context.Context) string {
+	return ctx.Value(_CTXTOPIC).(string)
 }
