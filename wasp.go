@@ -11,7 +11,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gowasp/corepb"
 	"github.com/gowasp/pkg"
-	"github.com/gowasp/pkg/pact"
 	"github.com/gowasp/wasp/callback"
 	"go.uber.org/zap"
 )
@@ -122,24 +121,24 @@ func (w *Wasp) handle(conn *TCPConn) {
 				code = buf.Next(1)[0]
 			}
 
-			if code == byte(pact.PING) {
-				w.typeHandle(pact.Type(code), conn, nil)
+			if code == byte(pkg.FIXED_PING) {
+				w.typeHandle(pkg.Fixed(code), conn, nil)
 				code = 0
 				continue
 			}
 
-			size, varintLen = pact.DecodeVarint(buf.Bytes()[0:])
+			size, varintLen = pkg.DecodeVarint(buf.Bytes()[0:])
 			buf.Next(varintLen)
 
 			if size+varintLen+1 == n {
-				w.typeHandle(pact.Type(code), conn, buf.Next(size))
+				w.typeHandle(pkg.Fixed(code), conn, buf.Next(size))
 				size, varintLen = 0, 0
 				code = 0
 				break
 			}
 
 			if size+varintLen+1 < n {
-				w.typeHandle(pact.Type(code), conn, buf.Next(size))
+				w.typeHandle(pkg.Fixed(code), conn, buf.Next(size))
 				code = 0
 				continue
 			}
@@ -149,19 +148,19 @@ func (w *Wasp) handle(conn *TCPConn) {
 	}
 }
 
-func (w *Wasp) typeHandle(t pact.Type, conn *TCPConn, body []byte) {
+func (w *Wasp) typeHandle(t pkg.Fixed, conn *TCPConn, body []byte) {
 	switch t {
-	case pact.CONNECT:
+	case pkg.FIXED_CONNECT:
 		w.connect(conn, body)
-	case pact.PING:
+	case pkg.FIXED_PING:
 		if callback.Callback.Ping != nil {
 			callback.Callback.Ping(conn.SID())
 		}
-	case pact.SUBSCRIBE:
+	case pkg.FIXED_SUBSCRIBE:
 		w.subHandle(conn, body)
-	case pact.PUBLISH:
+	case pkg.FIXED_PUBLISH:
 		w.pubHandle(conn, body)
-	case pact.PVTPUBLISH:
+	case pkg.FIXED_PVTPUBLISH:
 		w.pvtPubHandle(conn, body)
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
@@ -221,7 +220,7 @@ func (w *Wasp) connect(conn *TCPConn, body []byte) {
 		return
 	}
 
-	if _, err := conn.Write(pact.CONNACK.Encode(pbBody)); err != nil {
+	if _, err := conn.Write(pkg.FIXED_CONNECT.Encode(pbBody)); err != nil {
 		conn.Close()
 		zap.L().Warn(err.Error())
 		return
@@ -245,7 +244,7 @@ func (w *Wasp) subHandle(conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) pubHandle(conn *TCPConn, body []byte) {
-	seq, topic, body := pact.PubDecode(body)
+	seq, topic, body := pkg.PubDecode(body)
 
 	if callback.Callback.PubData != nil {
 		ci := &ConnInfo{
@@ -265,7 +264,7 @@ func (w *Wasp) pubHandle(conn *TCPConn, body []byte) {
 	}
 
 	for _, v := range conns {
-		if _, err := v.Write(pact.PubEncode(seq, topic, body)); err != nil {
+		if _, err := v.Write(pkg.PubEncode(seq, topic, body)); err != nil {
 			zap.L().Error(err.Error())
 			if callback.Callback.PubFail != nil {
 				ci := &ConnInfo{
@@ -281,7 +280,7 @@ func (w *Wasp) pubHandle(conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
-	seq, topicID, b := pact.PvtPubDecode(body)
+	seq, topicID, b := pkg.PvtPubDecode(body)
 
 	if v := w.private.Get(topicID); v != nil {
 		c := &ConnInfo{
@@ -296,7 +295,7 @@ func (w *Wasp) pvtPubHandle(conn *TCPConn, body []byte) {
 			return
 		}
 
-		pvtPubAck := pact.PvtPubAckEncode(seq)
+		pvtPubAck := pkg.PvtPubAckEncode(seq)
 		if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
 			callback.Callback.PvtPubAckFail(seq, err)
 		}
