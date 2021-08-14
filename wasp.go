@@ -281,17 +281,19 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 
 	idbody := append(pkg.EncodeVarint(seq), body...)
 
+	pubBody := pkg.FIXED_PUBLISH.Encode(idbody)
+
 	for _, v := range conns {
 		if callback.Callback.PubData != nil {
 			ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
-			callback.Callback.PubData(ctx, body)
+			callback.Callback.PubData(ctx, pubBody)
 		}
 
-		if _, err := v.Write(pkg.FIXED_PUBLISH.Encode(idbody)); err != nil {
+		if _, err := v.Write(pubBody); err != nil {
 			zap.L().Error(err.Error())
 			if callback.Callback.PubFail != nil {
 				ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
-				callback.Callback.PubFail(ctx, body, err)
+				callback.Callback.PubFail(ctx, pubBody, err)
 			}
 		}
 	}
