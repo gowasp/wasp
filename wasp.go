@@ -268,12 +268,6 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
-	if callback.Callback.PubData != nil {
-		ctx = context.WithValue(ctx, _CTXSEQ, seq)
-		ctx = context.WithValue(ctx, _CTXTOPIC, topic)
-		go callback.Callback.PubData(ctx, body)
-	}
-
 	conns := w.subMap.gets(topic)
 	if conns == nil {
 		if callback.Callback.PubFail != nil {
@@ -293,6 +287,12 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 				ctx = context.WithValue(ctx, _CTXSEQ, seq)
 				ctx = context.WithValue(ctx, _CTXTOPIC, topic)
 				callback.Callback.PubFail(ctx, body, err)
+			}
+		} else {
+			if callback.Callback.PubData != nil {
+				ctx = context.WithValue(ctx, _CTXSEQ, seq)
+				ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+				callback.Callback.PubData(ctx, body)
 			}
 		}
 	}
