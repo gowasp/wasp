@@ -256,7 +256,7 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 }
 
 var (
-	ErrTopicNotFound = errors.New("topic not found")
+	ErrSubscriberNotFound = errors.New("subscriber not found")
 )
 
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
@@ -268,12 +268,11 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
+	ctx = context.WithValue(ctx, _CTXSEQ, seq)
 	conns := w.subMap.gets(topic)
 	if conns == nil {
 		if callback.Callback.PubFail != nil {
-			ctx = context.WithValue(ctx, _CTXSEQ, seq)
-			ctx = context.WithValue(ctx, _CTXTOPIC, topic)
-			callback.Callback.PubFail(ctx, body, ErrTopicNotFound)
+			callback.Callback.PubFail(ctx, body, ErrSubscriberNotFound)
 		}
 		return
 	}
@@ -284,14 +283,12 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 		if _, err := v.Write(pkg.FIXED_PUBLISH.Encode(idbody)); err != nil {
 			zap.L().Error(err.Error())
 			if callback.Callback.PubFail != nil {
-				ctx = context.WithValue(ctx, _CTXSEQ, seq)
-				ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+				ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
 				callback.Callback.PubFail(ctx, body, err)
 			}
 		} else {
 			if callback.Callback.PubData != nil {
-				ctx = context.WithValue(ctx, _CTXSEQ, seq)
-				ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+				ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
 				callback.Callback.PubData(ctx, body)
 			}
 		}
@@ -322,9 +319,10 @@ func (w *Wasp) pvtPubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 type ctxString string
 
 const (
-	_CTXSEQ   ctxString = "ctxSeq"
-	_CTXTOPIC ctxString = "ctxTopic"
-	_CTXPEER  ctxString = "ctxPeer"
+	_CTXSEQ        ctxString = "ctxSeq"
+	_CTXTOPIC      ctxString = "ctxTopic"
+	_CTXPEER       ctxString = "ctxPeer"
+	_CTXSUBSCRIBER ctxString = "ctxSubscriber"
 )
 
 func CtxSeq(ctx context.Context) int {
@@ -337,4 +335,13 @@ func CtxPeer(ctx context.Context) *peer {
 
 func CtxTopic(ctx context.Context) string {
 	return ctx.Value(_CTXTOPIC).(string)
+}
+
+func CtxSubscriber(ctx context.Context) string {
+	suber := ctx.Value(_CTXSUBSCRIBER)
+	if suber == nil {
+		return ""
+	} else {
+		return suber.(string)
+	}
 }
