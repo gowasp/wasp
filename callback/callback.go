@@ -16,7 +16,7 @@ type callback struct {
 
 	Subscribe func(context.Context, string)
 	PubData   func(context.Context, []byte)
-	PubFail   func(context.Context, error, []byte)
+	PubFail   func(context.Context, []byte, error)
 }
 
 var (

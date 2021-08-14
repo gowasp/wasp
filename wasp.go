@@ -283,7 +283,7 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 			if callback.Callback.PubFail != nil {
 				ctx = context.WithValue(ctx, _CTXSEQ, seq)
 				ctx = context.WithValue(ctx, _CTXTOPIC, topic)
-				callback.Callback.PubFail(ctx, err, body)
+				callback.Callback.PubFail(ctx, body, err)
 			}
 		}
 	}
