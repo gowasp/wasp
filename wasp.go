@@ -3,6 +3,7 @@ package wasp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -254,6 +255,10 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	}
 }
 
+var (
+	ErrTopicNotFound = errors.New("topic not found")
+)
+
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	topic := string(body[1 : 1+body[0]])
 
@@ -271,7 +276,12 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 
 	conns := w.subMap.gets(topic)
 	if conns == nil {
-		zap.L().Warn("topic not found " + topic)
+		if callback.Callback.PubFail != nil {
+			ctx = context.WithValue(ctx, _CTXSEQ, seq)
+			ctx = context.WithValue(ctx, _CTXTOPIC, topic)
+			callback.Callback.PubFail(ctx, body, err)
+			zap.L().Warn(ErrTopicNotFound.Error() + topic)
+		}
 		return
 	}
 
