@@ -24,7 +24,7 @@ func SetReadTimeout(t time.Duration) {
 }
 
 type Generater interface {
-	Seq() int
+	Seq(topic string, body []byte) (int, error)
 }
 
 type Wasp struct {
@@ -255,9 +255,11 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
-	seq := w.gen.Seq()
-
 	topic := string(body[1 : 1+body[0]])
+	seq, err := w.gen.Seq(topic, body[1+body[0]:])
+	if err != nil {
+		return
+	}
 
 	if callback.Callback.PubData != nil {
 		ctx = context.WithValue(ctx, _CTXSEQ, seq)
@@ -313,13 +315,6 @@ const (
 	_CTXTOPIC ctxString = "ctxTopic"
 	_CTXPEER  ctxString = "ctxPeer"
 )
-
-//func setCtx(ci *ConnInfo, seq int, topic string) context.Context {
-//	ctx := context.WithValue(context.Background(), _CTXCONN_INFO, ci)
-//	ctx = context.WithValue(ctx, _CTXSEQ, seq)
-//	ctx = context.WithValue(ctx, _CTXTOPIC, topic)
-//	return ctx
-//}
 
 func CtxSeq(ctx context.Context) int {
 	return ctx.Value(_CTXSEQ).(int)
