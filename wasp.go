@@ -173,6 +173,8 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 		w.subHandle(ctx, conn, body)
 	case pkg.FIXED_PUBLISH:
 		w.pubHandle(ctx, conn, body)
+	case pkg.FIXED_PUBACK:
+		w.pubAckHandle(ctx, body)
 	case pkg.FIXED_PVTPUBLISH:
 		w.pvtPubHandle(ctx, conn, body)
 	default:
@@ -292,6 +294,13 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 				callback.Callback.PubData(ctx, body)
 			}
 		}
+	}
+}
+
+func (w *Wasp) pubAckHandle(ctx context.Context, body []byte) {
+	if callback.Callback.PubAck != nil {
+		seq, _ := pkg.DecodeVarint(body)
+		callback.Callback.PubAck(ctx, seq)
 	}
 }
 
