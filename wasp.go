@@ -23,9 +23,15 @@ func SetReadTimeout(t time.Duration) {
 	readTimeout = t
 }
 
+type Generater interface {
+	Seq() int
+}
+
 type Wasp struct {
 	readTimeout time.Duration
 	private     *pkg.Private
+
+	gen Generater
 
 	subMap *subMap
 }
@@ -68,6 +74,10 @@ func (w *Wasp) Run(addr ...string) error {
 		go w.handle(&TCPConn{TCPConn: conn})
 	}
 
+}
+
+func (w *Wasp) GenSeq(gen Generater) {
+	w.gen = gen
 }
 
 func (w *Wasp) Private() *pkg.Private {
@@ -245,7 +255,9 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
-	seq, topic, body := pkg.PubDecode(body)
+	seq := w.gen.Seq()
+
+	topic := string(body[1 : 1+body[0]])
 
 	if callback.Callback.PubData != nil {
 		ctx = context.WithValue(ctx, _CTXSEQ, seq)
@@ -259,8 +271,10 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
+	idbody := append(pkg.EncodeVarint(seq), body...)
+
 	for _, v := range conns {
-		if _, err := v.Write(pkg.PubEncode(seq, topic, body)); err != nil {
+		if _, err := v.Write(pkg.FIXED_PUBLISH.Encode(idbody)); err != nil {
 			zap.L().Error(err.Error())
 			if callback.Callback.PubFail != nil {
 				ctx = context.WithValue(ctx, _CTXSEQ, seq)
