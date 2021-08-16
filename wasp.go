@@ -175,8 +175,6 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 		w.pubHandle(ctx, conn, body)
 	case pkg.FIXED_PUBACK:
 		w.pubAckHandle(ctx, body)
-	case pkg.FIXED_PVTPUBLISH:
-		w.pvtPubHandle(ctx, conn, body)
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
 	}
@@ -304,27 +302,6 @@ func (w *Wasp) pubAckHandle(ctx context.Context, body []byte) {
 		seq, _ := pkg.DecodeVarint(body)
 		callback.Callback.PubAck(ctx, seq)
 	}
-}
-
-func (w *Wasp) pvtPubHandle(ctx context.Context, conn *TCPConn, body []byte) {
-	seq, topicID, b := pkg.PvtPubDecode(body)
-
-	if v := w.private.Get(topicID); v != nil {
-		ctx = context.WithValue(ctx, _CTXSEQ, seq)
-		ctx = context.WithValue(ctx, _CTXTOPIC, topicID)
-		if err := v(ctx, b); err != nil {
-			return
-		}
-
-		pvtPubAck := pkg.PvtPubAckEncode(seq)
-		if _, err := conn.Write(pvtPubAck); err != nil && callback.Callback.PvtPubAckFail != nil {
-			callback.Callback.PvtPubAckFail(seq, err)
-		}
-
-	} else {
-		zap.S().Warnf("topicID %d was not found", topicID)
-	}
-
 }
 
 type ctxString string
