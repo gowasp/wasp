@@ -221,6 +221,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		err := callback.Callback.Connect(ctx, pb)
 		if err != nil {
 			conn.sid = ""
+			conn.Close()
 			return
 		}
 
