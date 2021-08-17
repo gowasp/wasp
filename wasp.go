@@ -240,7 +240,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
-	if _, err := conn.Write(pkg.FIXED_CONNECT.Encode(pbBody)); err != nil {
+	if _, err := conn.Write(pkg.FIXED_CONNACK.Encode(pbBody)); err != nil {
 		conn.Close()
 		zap.L().Warn(err.Error())
 		return
