@@ -30,7 +30,6 @@ type Generater interface {
 
 type Wasp struct {
 	readTimeout time.Duration
-	private     *pkg.Private
 
 	gen Generater
 
@@ -79,13 +78,6 @@ func (w *Wasp) Run(addr ...string) error {
 
 func (w *Wasp) GenSeq(gen Generater) {
 	w.gen = gen
-}
-
-func (w *Wasp) Private() *pkg.Private {
-	if w.private == nil {
-		w.private = &pkg.Private{}
-	}
-	return w.private
 }
 
 func (w *Wasp) handle(conn *TCPConn) {

@@ -43,18 +43,6 @@ func TestWasp_connect(t *testing.T) {
 	select {}
 }
 
-func TestWasp_Private(t *testing.T) {
-	l, _ := zap.NewDevelopment()
-	zap.ReplaceGlobals(l)
-	w := Default()
-	w.Private().Subscribe(1, func(ctx context.Context, body []byte) error {
-		zap.L().Debug(string(body))
-		return nil
-	})
-
-	w.Run()
-}
-
 func TestWasp_Run(t *testing.T) {
 	l, _ := zap.NewDevelopment()
 	zap.ReplaceGlobals(l)
