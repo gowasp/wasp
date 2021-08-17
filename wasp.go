@@ -168,9 +168,9 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 	case pkg.FIXED_PING:
 		if callback.Callback.Ping != nil {
 			callback.Callback.Ping(conn.SID())
-			if _, err := conn.Write([]byte{byte(pkg.FIXED_PONG)}); err != nil {
-				conn.Close()
-			}
+		}
+		if _, err := conn.Write([]byte{byte(pkg.FIXED_PONG)}); err != nil {
+			conn.Close()
 		}
 	case pkg.FIXED_SUBSCRIBE:
 		w.subHandle(ctx, conn, body)
