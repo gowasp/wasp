@@ -247,7 +247,7 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	w.subMap.put(string(body), conn.SID(), conn)
 
 	if callback.Callback.Subscribe != nil {
-		callback.Callback.Subscribe(ctx, string(body))
+		callback.Callback.Subscribe(ctx, body)
 	}
 }
 
