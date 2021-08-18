@@ -245,7 +245,16 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 }
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
-	w.subMap.put(string(body), conn.SID(), conn)
+	if len(body) == 0 {
+		return
+	}
+
+	ts := bytes.Split(body, []byte{'\n'})
+	for _, v := range ts {
+		if len(v) != 0 {
+			w.subMap.put(string(v), conn.SID(), conn)
+		}
+	}
 
 	if callback.Callback.Subscribe != nil {
 		callback.Callback.Subscribe(ctx, body)
