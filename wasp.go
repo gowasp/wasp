@@ -132,8 +132,10 @@ func (w *Wasp) handle(conn *TCPConn) {
 				continue
 			}
 
-			size, varintLen = pkg.DecodeVarint(buf.Bytes()[0:])
-			buf.Next(varintLen)
+			if varintLen == 0 {
+				size, varintLen = pkg.DecodeVarint(buf.Bytes())
+				buf.Next(varintLen)
+			}
 
 			if size+varintLen+1 == n {
 				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
