@@ -137,20 +137,19 @@ func (w *Wasp) handle(conn *TCPConn) {
 				buf.Next(varintLen)
 			}
 
-			if size+varintLen+1 == n {
+			if size == buf.Len() {
 				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
 				size, varintLen = 0, 0
 				code = 0
 				break
-			}
-
-			if size+varintLen+1 < n {
+			} else if size < buf.Len() {
 				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
+				size, varintLen = 0, 0
 				code = 0
 				continue
+			} else {
+				break
 			}
-			break
-
 		}
 	}
 }
