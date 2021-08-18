@@ -211,7 +211,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		pr.sid = conn.SID()
 		pr.username = pb.Username
 		pr.group = pb.Group
-		pr.username = pb.Username
+		pr.remoteAddr = conn.RemoteAddr().String()
 
 		err := callback.Callback.Connect(ctx, pb)
 		if err != nil {
