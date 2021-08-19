@@ -107,6 +107,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 				return
 			}
 
+			w.subMap.delete(conn.SID())
 			w.connMap.Delete(conn.SID())
 
 			if callback.Callback.Close != nil {
@@ -191,6 +192,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 	if v, ok := w.connMap.Load(pb.GetUdid()); ok {
 		oldConn := v.(*TCPConn)
 		w.connMap.Delete(oldConn.SID())
+		w.subMap.delete(oldConn.SID())
 		zap.L().Warn("Old connection will be closed", zap.String("sid", oldConn.SID()),
 			zap.String("remote_addr", oldConn.RemoteAddr().String()),
 		)
