@@ -33,7 +33,8 @@ type Wasp struct {
 
 	gen Generater
 
-	subMap *subMap
+	connMap sync.Map
+	subMap  *subMap
 }
 
 func Default() *Wasp {
@@ -106,9 +107,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 				return
 			}
 
-			connMap.Delete(conn.SID())
-
-			w.subMap.delete(conn.SID())
+			w.connMap.Delete(conn.SID())
 
 			if callback.Callback.Close != nil {
 				callback.Callback.Close(conn.SID())
@@ -176,9 +175,7 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 	}
 }
 
-var (
-	connMap sync.Map
-)
+var ()
 
 func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 	pb := &corepb.Connect{}
@@ -193,9 +190,9 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
-	if v, ok := connMap.Load(pb.GetUdid()); ok {
+	if v, ok := w.connMap.Load(pb.GetUdid()); ok {
 		oldConn := v.(*TCPConn)
-		connMap.Delete(oldConn.SID())
+		w.connMap.Delete(oldConn.SID())
 		zap.L().Warn("Old connection will be closed", zap.String("sid", oldConn.SID()),
 			zap.String("remote_addr", oldConn.RemoteAddr().String()),
 		)
@@ -206,7 +203,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 	conn.sid = pb.GetUdid()
 
 	if callback.Callback.Connect == nil {
-		connMap.Store(conn.SID(), conn)
+		w.connMap.Store(conn.SID(), conn)
 	} else {
 		pr := ctx.Value(_CTXPEER).(*peer)
 		pr.sid = conn.SID()
@@ -221,7 +218,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 			return
 		}
 
-		connMap.Store(conn.SID(), conn)
+		w.connMap.Store(conn.SID(), conn)
 
 	}
 
