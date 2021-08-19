@@ -175,8 +175,6 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 	}
 }
 
-var ()
-
 func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 	pb := &corepb.Connect{}
 	if err := proto.Unmarshal(body, pb); err != nil {
