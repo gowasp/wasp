@@ -47,12 +47,11 @@ func Default() *Wasp {
 }
 
 func (w *Wasp) Run(addr ...string) error {
-	var taddr string
 	if len(addr) == 0 {
-		taddr = ":6000"
-	} else {
-		taddr = addr[0]
+		addr = append(addr, ":6000")
 	}
+
+	taddr := addr[0]
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", taddr)
 	if err != nil {
