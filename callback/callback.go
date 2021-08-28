@@ -16,8 +16,6 @@ type callback struct {
 	PubData   func(context.Context, []byte)
 	PubFail   func(context.Context, []byte, error)
 	PubAck    func(context.Context, int)
-
-	PvtPubAckFail func(int, error)
 }
 
 var (
