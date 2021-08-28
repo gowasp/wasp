@@ -63,7 +63,9 @@ func (w *Wasp) Run(addr ...string) error {
 		return err
 	}
 
-	zap.L().Info("Service started successfully", zap.String("listen", tcpAddr.String()))
+	if callback.Callback.AfterListen != nil {
+		callback.Callback.AfterListen(addr[0])
+	}
 
 	for {
 		conn, err := ln.AcceptTCP()

@@ -7,6 +7,7 @@ import (
 )
 
 type callback struct {
+	AfterListen func(string)
 	// string: remote_addr.
 	Connect   func(context.Context, *corepb.Connect) error
 	Close     func(string) error
