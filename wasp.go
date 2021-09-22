@@ -169,7 +169,7 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 	case pkg.FIXED_SUBSCRIBE:
 		w.subHandle(ctx, conn, body)
 	case pkg.FIXED_PUBLISH:
-		w.pubHandle(ctx, conn, body)
+		w.pubHandle(ctx, body)
 	case pkg.FIXED_PUBACK:
 		w.pubAckHandle(ctx, body)
 	default:
@@ -222,31 +222,9 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		w.connMap.Store(conn.SID(), conn)
 
 		// send 'online' message
-		conns := w.subMap.gets("online")
-		if conns != nil {
-			seq, err := w.gen.Seq(ctx, []byte(pr.sid))
-			if err != nil {
-				return
-			}
-			idbody := append(pkg.EncodeVarint(seq), []byte(pr.sid)...)
 
-			pubBody := pkg.FIXED_PUBLISH.Encode(idbody)
-
-			for _, v := range conns {
-				if callback.Callback.PubData != nil {
-					ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
-					callback.Callback.PubData(ctx, pubBody)
-				}
-
-				if _, err := v.Write(pubBody); err != nil {
-					zap.L().Error(err.Error())
-					if callback.Callback.PubFail != nil {
-						ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
-						callback.Callback.PubFail(ctx, pubBody, err)
-					}
-				}
-			}
-		}
+		onlineBody := pkg.PubEncode("online", []byte(conn.sid))
+		w.pubHandle(ctx, onlineBody)
 	}
 
 	pbAck := &corepb.ConnAck{
@@ -289,7 +267,7 @@ var (
 	ErrSubscriberNotFound = errors.New("subscriber not found")
 )
 
-func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, body []byte) {
+func (w *Wasp) pubHandle(ctx context.Context, body []byte) {
 	topic := string(body[1 : 1+body[0]])
 
 	ctx = context.WithValue(ctx, _CTXTOPIC, topic)
