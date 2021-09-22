@@ -112,6 +112,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 			w.connMap.Delete(conn.SID())
 
 			if callback.Callback.Close != nil {
+				w.offline(ctx, conn.sid)
 				callback.Callback.Close(conn.SID())
 			}
 			return
@@ -197,6 +198,8 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		zap.L().Warn("Old connection will be closed", zap.String("sid", oldConn.SID()),
 			zap.String("remote_addr", oldConn.RemoteAddr().String()),
 		)
+
+		w.offline(ctx, oldConn.sid)
 		oldConn.sid = ""
 		oldConn.Close()
 	}
@@ -245,6 +248,14 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
+}
+
+// send 'offline' message
+func (w *Wasp) offline(ctx context.Context, sid string) {
+	topic := "offline"
+	onlineBody := append([]byte{(byte(len(topic)))}, []byte("offline")...)
+	onlineBody = append(onlineBody, []byte(sid)...)
+	w.pubHandle(ctx, onlineBody)
 }
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
