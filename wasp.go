@@ -222,7 +222,9 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		w.connMap.Store(conn.SID(), conn)
 
 		// send 'online' message
-		onlineBody := pkg.PubEncode("online", []byte(conn.sid))
+		topic := "online"
+		onlineBody := append([]byte{(byte(len(topic)))}, []byte("online")...)
+		onlineBody = append(onlineBody, []byte(conn.sid)...)
 		w.pubHandle(ctx, onlineBody)
 	}
 
