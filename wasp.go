@@ -221,6 +221,32 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 
 		w.connMap.Store(conn.SID(), conn)
 
+		// send 'online' message
+		conns := w.subMap.gets("online")
+		if conns != nil {
+			seq, err := w.gen.Seq(ctx, []byte(pr.sid))
+			if err != nil {
+				return
+			}
+			idbody := append(pkg.EncodeVarint(seq), []byte(pr.sid)...)
+
+			pubBody := pkg.FIXED_PUBLISH.Encode(idbody)
+
+			for _, v := range conns {
+				if callback.Callback.PubData != nil {
+					ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
+					callback.Callback.PubData(ctx, pubBody)
+				}
+
+				if _, err := v.Write(pubBody); err != nil {
+					zap.L().Error(err.Error())
+					if callback.Callback.PubFail != nil {
+						ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
+						callback.Callback.PubFail(ctx, pubBody, err)
+					}
+				}
+			}
+		}
 	}
 
 	pbAck := &corepb.ConnAck{
