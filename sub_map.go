@@ -20,7 +20,7 @@ func (s *subMap) put(topic, sid string, conn *TCPConn) {
 	s.cache[topic][sid] = conn
 }
 
-func (s *subMap) gets(topic string) []*TCPConn {
+func (s *subMap) list(topic string) []*TCPConn {
 	s.rwmutex.RLock()
 	defer s.rwmutex.RUnlock()
 

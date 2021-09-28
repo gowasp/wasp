@@ -273,7 +273,7 @@ func (w *Wasp) pubHandle(ctx context.Context, body []byte) {
 	}
 
 	ctx = context.WithValue(ctx, _CTXSEQ, seq)
-	conns := w.subMap.gets(topic)
+	conns := w.subMap.list(topic)
 	if conns == nil {
 		if callback.Callback.PubFail != nil {
 			callback.Callback.PubFail(ctx, body, ErrSubscriberNotFound)
