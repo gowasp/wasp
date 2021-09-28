@@ -10,7 +10,7 @@ type callback struct {
 	AfterListen func(string)
 	// string: remote_addr.
 	Connect   func(context.Context, *corepb.Connect) error
-	Close     func(string) error
+	Close     func(context.Context) error
 	Ping      func(string)
 	Subscribe func(context.Context, []byte)
 	PubData   func(context.Context, []byte)

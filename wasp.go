@@ -112,7 +112,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 			w.connMap.Delete(conn.SID())
 
 			if callback.Callback.Close != nil {
-				callback.Callback.Close(conn.SID())
+				callback.Callback.Close(ctx)
 			}
 			return
 		}
