@@ -308,6 +308,10 @@ func (w *Wasp) pubAckHandle(ctx context.Context, body []byte) {
 	}
 }
 
+func (w *Wasp) SubConns(topic string) []*TCPConn {
+	return w.subMap.list(topic)
+}
+
 type ctxString string
 
 const (
