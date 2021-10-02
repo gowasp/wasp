@@ -139,12 +139,18 @@ func (w *Wasp) handle(conn *TCPConn) {
 			}
 
 			if size == buf.Len() {
-				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
+				if err := w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size)); err != nil {
+					conn.Close()
+					return
+				}
 				size, varintLen = 0, 0
 				code = 0
 				break
 			} else if size < buf.Len() {
-				w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size))
+				if err := w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size)); err != nil {
+					conn.Close()
+					return
+				}
 				size, varintLen = 0, 0
 				code = 0
 				continue
@@ -155,10 +161,11 @@ func (w *Wasp) handle(conn *TCPConn) {
 	}
 }
 
-func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body []byte) {
+func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body []byte) error {
 	switch t {
 	case pkg.FIXED_CONNECT:
 		w.connect(ctx, conn, body)
+		return nil
 	case pkg.FIXED_PING:
 		if callback.Callback.Ping != nil {
 			callback.Callback.Ping(conn.SID())
@@ -166,14 +173,19 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body 
 		if _, err := conn.Write([]byte{byte(pkg.FIXED_PONG)}); err != nil {
 			conn.Close()
 		}
+		return nil
 	case pkg.FIXED_SUBSCRIBE:
 		w.subHandle(ctx, conn, body)
+		return nil
 	case pkg.FIXED_PUBLISH:
 		w.pubHandle(ctx, body)
+		return nil
 	case pkg.FIXED_PUBACK:
 		w.pubAckHandle(ctx, body)
+		return nil
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
+		return errors.New("Unsupported PkgType")
 	}
 }
 
