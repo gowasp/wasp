@@ -135,6 +135,10 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 			if varintLen == 0 {
 				size, varintLen = pkg.DecodeVarint(buf.Bytes())
+				if varintLen < 0 {
+					conn.Close()
+					return
+				}
 				buf.Next(varintLen)
 			}
 
