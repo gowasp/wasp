@@ -105,13 +105,23 @@ func (w *Wasp) handle(conn *TCPConn) {
 		for {
 			b, err := reader.ReadByte()
 			if err != nil {
+				zap.L().Warn(conn.SID() + ": " + err.Error())
 				conn.Close()
-				if len(conn.SID()) == 0 {
-					w.bufferPool.Put(buf)
+
+				if conn.SID() == "" {
 					return
 				}
 
-				w.connMap.Delete(conn.SID())
+				mapConn, ok := w.connMap.Load(conn.SID())
+				if !ok {
+					return
+				}
+
+				if conn.connectTime < mapConn.(*TCPConn).connectTime {
+					return
+				} else {
+					w.connMap.Delete(conn.SID())
+				}
 
 				if callback.Callback.Close != nil {
 					callback.Callback.Close(ctx)
@@ -218,18 +228,13 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
 		return
 	}
 
-	if v, ok := w.connMap.Load(pb.GetUdid()); ok {
-		oldConn := v.(*TCPConn)
-		w.connMap.Delete(oldConn.SID())
-		zap.L().Warn("old connection will be closed", zap.String("sid", oldConn.SID()),
-			zap.String("remote_addr", oldConn.RemoteAddr().String()),
-		)
-
-		oldConn.sid = ""
-		oldConn.Close()
+	if _, ok := w.connMap.Load(pb.GetUdid()); ok {
+		w.connMap.Delete(pb.GetUdid())
+		zap.L().Warn("old connection will be closed")
 	}
 
 	conn.sid = pb.GetUdid()
+	conn.connectTime = time.Now().UnixNano() / 1e6
 
 	if callback.Callback.Connect == nil {
 		w.connMap.Store(conn.SID(), conn)
