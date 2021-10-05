@@ -111,6 +111,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 			if callback.Callback.Close != nil {
 				callback.Callback.Close(ctx)
 			}
+			return
 		}
 
 		if code == 0 {
