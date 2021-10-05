@@ -123,9 +123,12 @@ func (w *Wasp) handle(conn *TCPConn) {
 				if code == byte(pkg.FIXED_PING) {
 					w.heartbeat(conn)
 					offset, varintLen, size, code = 0, 0, 0, 0
+					buf.Reset()
+					w.bufferPool.Put(buf)
+					break
+				} else {
+					continue
 				}
-				w.bufferPool.Put(buf)
-				break
 			}
 
 			if varintLen == 0 {
@@ -222,7 +225,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
 		return
 	}
 
-	if _, err := conn.Write(pkg.ConnAckEncode(pbBody)); err != nil {
+	if _, err := conn.Write(pkg.FIXED_CONNACK.Encode(pbBody)); err != nil {
 		conn.Close()
 		zap.L().Warn(err.Error())
 		return
@@ -255,18 +258,18 @@ var (
 //var i int
 
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
-	topicLen := buf.Next(1)[0]
-	topic := string(buf.Next(int(topicLen)))
+	publish := &corepb.Publish{}
+	if err := proto.Unmarshal(buf.Bytes(), publish); err != nil {
+		conn.Close()
+		zap.L().Error(err.Error())
+		return
+	}
 
-	conns := w.subMap.list(topic)
+	conns := w.subMap.list(publish.Topic)
 	if conns == nil {
 		zap.L().Warn("no subscribers")
 		return
 	}
-
-	// for test
-	//i++
-	//os.WriteFile("./"+fmt.Sprint(i)+".jpeg", buf.Bytes(), os.ModePerm)
 
 	for _, v := range conns {
 		if _, err := v.Write(buf.Bytes()); err != nil {

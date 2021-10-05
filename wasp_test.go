@@ -38,7 +38,7 @@ func TestWasp_connect(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	b := pkg.ConnectEncode(body)
+	b := pkg.FIXED_CONNECT.Encode(body)
 	conn.Write(b)
 	select {}
 }
@@ -87,12 +87,12 @@ func TestWasp_subHandle(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	b := pkg.ConnectEncode(body)
+	b := pkg.FIXED_CONNECT.Encode(body)
 	conn.Write(b)
 	time.Sleep(3 * time.Second)
 
 	topic := "a/b\na/c\nb/b"
-	conn.Write(pkg.ConnectEncode([]byte(topic)))
+	conn.Write(pkg.FIXED_CONNECT.Encode([]byte(topic)))
 	select {}
 
 }
@@ -118,11 +118,11 @@ func TestWasp_pubHandle(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	b := pkg.ConnectEncode(body)
+	b := pkg.FIXED_CONNECT.Encode(body)
 	conn.Write(b)
 	time.Sleep(1 * time.Second)
 	topic := "a/b"
-	conn.Write(pkg.SubEncode([]byte(topic)))
+	conn.Write(pkg.FIXED_SUBSCRIBE.Encode([]byte(topic)))
 
 	time.Sleep(1 * time.Second)
 
@@ -144,7 +144,7 @@ func TestWasp_pubHandle(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	b1 := pkg.ConnectEncode(body1)
+	b1 := pkg.FIXED_CONNECT.Encode(body1)
 	connPub.Write(b1)
 	time.Sleep(1 * time.Second)
 	resp, err := http.Get("http://img.mm4000.com/file/9/a3/e30335cd64_1044.jpg")
@@ -158,8 +158,15 @@ func TestWasp_pubHandle(t *testing.T) {
 		zap.L().Error(err.Error())
 		return
 	}
+
+	publish := &corepb.Publish{
+		Topic: "a/b",
+		Body:  b2,
+	}
+
+	pbody, _ := proto.Marshal(publish)
 	for {
-		connPub.Write(pkg.PubEncode("a/b", b2))
+		connPub.Write(pkg.FIXED_PUBLISH.Encode(pbody))
 		time.Sleep(10 * time.Millisecond)
 	}
 }
