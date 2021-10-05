@@ -87,6 +87,7 @@ func (w *Wasp) Run(addr ...string) error {
 func (w *Wasp) handle(conn *TCPConn) {
 	reader := bufio.NewReader(conn)
 	buf := w.bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
 	var (
 		offset,
 		varintLen,
@@ -140,6 +141,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 			w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
 			offset, varintLen, size, code = 0, 0, 0, 0
 			buf.Reset()
+			w.bufferPool.Put(buf)
 		}
 	}
 }
