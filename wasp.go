@@ -115,12 +115,10 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 		if code == 0 {
 			code = b
-			continue
-		}
-
-		if code == byte(pkg.FIXED_PING) {
-			w.heartbeat(conn)
-			offset, varintLen, size, code = 0, 0, 0, 0
+			if code == byte(pkg.FIXED_PING) {
+				w.heartbeat(conn)
+				offset, varintLen, size, code = 0, 0, 0, 0
+			}
 			continue
 		}
 
