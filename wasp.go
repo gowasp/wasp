@@ -272,7 +272,7 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) 
 	}
 
 	for _, v := range conns {
-		if _, err := v.Write(buf.Bytes()); err != nil {
+		if _, err := v.Write(pkg.FIXED_PUBLISH.Encode(buf.Bytes())); err != nil {
 			zap.L().Warn(err.Error())
 		}
 	}
