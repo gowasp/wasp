@@ -137,7 +137,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 					offset, varintLen, size, code = 0, 0, 0, 0
 					buf.Reset()
 					w.bufferPool.Put(buf)
-					break
+					continue
 				} else if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
 					buf.WriteByte(b)
 					continue
@@ -198,6 +198,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 				offset, varintLen, size, code = 0, 0, 0, 0
 				buf.Reset()
 				w.bufferPool.Put(buf)
+				break
 			}
 		}
 
