@@ -89,6 +89,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 	var (
 		offset,
 		varintLen,
+		topicLen,
 		size int
 		code byte
 
@@ -97,7 +98,11 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 	for {
 		buf := w.bufferPool.Get().(*bytes.Buffer)
+		bufTopic := w.bufferPool.Get().(*bytes.Buffer)
+		bufVarint := w.bufferPool.Get().(*bytes.Buffer)
 		buf.Reset()
+		bufTopic.Reset()
+		bufVarint.Reset()
 		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
 		for {
 			b, err := reader.ReadByte()
@@ -105,6 +110,8 @@ func (w *Wasp) handle(conn *TCPConn) {
 				conn.Close()
 				if len(conn.SID()) == 0 {
 					w.bufferPool.Put(buf)
+					w.bufferPool.Put(bufTopic)
+					w.bufferPool.Put(bufVarint)
 					return
 				}
 
@@ -115,20 +122,65 @@ func (w *Wasp) handle(conn *TCPConn) {
 					callback.Callback.Close(ctx)
 				}
 				w.bufferPool.Put(buf)
+				w.bufferPool.Put(bufTopic)
+				w.bufferPool.Put(bufVarint)
 				return
 			}
 
 			if code == 0 {
 				code = b
-				if code == byte(pkg.FIXED_PING) {
+				if pkg.Fixed(code) == pkg.FIXED_PING {
 					w.heartbeat(conn)
 					offset, varintLen, size, code = 0, 0, 0, 0
 					buf.Reset()
 					w.bufferPool.Put(buf)
+					w.bufferPool.Put(bufTopic)
+					w.bufferPool.Put(bufVarint)
 					break
+				} else if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
+					buf.WriteByte(b)
+					continue
 				} else {
 					continue
 				}
+			}
+
+			if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
+				if topicLen == 0 {
+					topicLen = int(b)
+					buf.WriteByte(b)
+					continue
+				}
+				if topicLen != bufTopic.Len() {
+					buf.WriteByte(b)
+					bufTopic.WriteByte(b)
+					continue
+				}
+
+				if varintLen == 0 {
+					varintLen = int(b)
+					buf.WriteByte(b)
+					continue
+				}
+				buf.WriteByte(b)
+				bufVarint.WriteByte(b)
+				offset++
+
+				if offset == varintLen {
+					px, pn := proto.DecodeVarint(bufVarint.Bytes())
+					size = int(px) + pn
+				}
+				if offset == size && size != 0 {
+					w.pubHandle(ctx, conn, string(bufTopic.Bytes()), buf)
+					offset, varintLen, size, code, topicLen = 0, 0, 0, 0, 0
+					buf.Reset()
+					bufTopic.Reset()
+					bufVarint.Reset()
+					w.bufferPool.Put(buf)
+					w.bufferPool.Put(bufTopic)
+					w.bufferPool.Put(bufVarint)
+				}
+				continue
 			}
 
 			if varintLen == 0 {
@@ -161,8 +213,6 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, buf *
 		w.connect(ctx, conn, buf)
 	case pkg.FIXED_SUBSCRIBE:
 		w.subHandle(ctx, conn, buf)
-	case pkg.FIXED_PUBLISH:
-		w.pubHandle(ctx, conn, buf)
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
 	}
@@ -257,22 +307,15 @@ var (
 // for test
 //var i int
 
-func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
-	publish := &corepb.Publish{}
-	if err := proto.Unmarshal(buf.Bytes(), publish); err != nil {
-		conn.Close()
-		zap.L().Error(err.Error())
-		return
-	}
-
-	conns := w.subMap.list(publish.Topic)
+func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, topic string, buf *bytes.Buffer) {
+	conns := w.subMap.list(topic)
 	if conns == nil {
 		zap.L().Warn("no subscribers")
 		return
 	}
 
 	for _, v := range conns {
-		if _, err := v.Write(pkg.FIXED_PUBLISH.Encode(buf.Bytes())); err != nil {
+		if _, err := v.Write(buf.Bytes()); err != nil {
 			zap.L().Warn(err.Error())
 		}
 	}
