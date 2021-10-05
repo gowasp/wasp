@@ -98,85 +98,60 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 	topicBytes := make([]byte, 0)
 	varintBytes := make([]byte, 0)
+	buf := w.bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
 	for {
-		buf := w.bufferPool.Get().(*bytes.Buffer)
-		buf.Reset()
 		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
-		for {
-			b, err := reader.ReadByte()
-			if err != nil {
-				zap.L().Warn(conn.SID() + ": " + err.Error())
-				conn.Close()
+		b, err := reader.ReadByte()
+		if err != nil {
+			zap.L().Warn(conn.SID() + ": " + err.Error())
+			conn.Close()
 
-				if conn.SID() == "" {
-					return
-				}
-
-				mapConn, ok := w.connMap.Load(conn.SID())
-				if !ok {
-					return
-				}
-
-				if conn.connectTime < mapConn.(*TCPConn).connectTime {
-					return
-				} else {
-					w.connMap.Delete(conn.SID())
-				}
-
-				if callback.Callback.Close != nil {
-					callback.Callback.Close(ctx)
-				}
-				w.bufferPool.Put(buf)
+			if conn.SID() == "" {
 				return
 			}
 
-			if code == 0 {
-				code = b
-				if pkg.Fixed(code) == pkg.FIXED_PING {
-					w.heartbeat(conn)
-					offset, varintLen, size, code = 0, 0, 0, 0
-					buf.Reset()
-					w.bufferPool.Put(buf)
-					continue
-				} else if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
-					buf.WriteByte(b)
-					continue
-				} else {
-					continue
-				}
+			mapConn, ok := w.connMap.Load(conn.SID())
+			if !ok {
+				return
 			}
 
-			if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
+			if conn.connectTime < mapConn.(*TCPConn).connectTime {
+				return
+			} else {
+				w.connMap.Delete(conn.SID())
+			}
+
+			if callback.Callback.Close != nil {
+				callback.Callback.Close(ctx)
+			}
+			buf.Reset()
+			w.bufferPool.Put(buf)
+			return
+		}
+
+		if code == 0 {
+			code = b
+			if pkg.Fixed(code) == pkg.FIXED_PING {
+				w.heartbeat(conn)
+				offset, varintLen, size, code = 0, 0, 0, 0
+				continue
+			} else if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
 				buf.WriteByte(b)
-				if topicLen == 0 {
-					topicLen = int(b)
-					continue
-				}
-				if topicLen != len(topicBytes) {
-					topicBytes = append(topicBytes, b)
-					continue
-				}
+				continue
+			} else {
+				continue
+			}
+		}
 
-				if varintLen == 0 {
-					varintLen = int(b)
-					continue
-				}
-				varintBytes = append(varintBytes, b)
-				offset++
-
-				if offset == varintLen {
-					px, pn := proto.DecodeVarint(varintBytes)
-					size = int(px) + pn
-				}
-				if offset == size && size != 0 {
-					w.pubHandle(ctx, conn, string(topicBytes), buf)
-					offset, varintLen, size, code, topicLen = 0, 0, 0, 0, 0
-					buf.Reset()
-					topicBytes = make([]byte, 0)
-					varintBytes = make([]byte, 0)
-					w.bufferPool.Put(buf)
-					break
-				}
+		if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
+			buf.WriteByte(b)
+			if topicLen == 0 {
+				topicLen = int(b)
+				continue
+			}
+			if topicLen != len(topicBytes) {
+				topicBytes = append(topicBytes, b)
 				continue
 			}
 
@@ -184,25 +159,45 @@ func (w *Wasp) handle(conn *TCPConn) {
 				varintLen = int(b)
 				continue
 			}
-
-			buf.WriteByte(b)
+			varintBytes = append(varintBytes, b)
 			offset++
 
 			if offset == varintLen {
-				px, pn := proto.DecodeVarint(buf.Next(offset))
+				px, pn := proto.DecodeVarint(varintBytes)
 				size = int(px) + pn
 			}
-
 			if offset == size && size != 0 {
-				w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
-				offset, varintLen, size, code = 0, 0, 0, 0
-				buf.Reset()
-				w.bufferPool.Put(buf)
-				break
+				w.pubHandle(ctx, conn, string(topicBytes), buf)
+				offset, varintLen, size, code, topicLen = 0, 0, 0, 0, 0
+				buf.Next(buf.Len())
+				topicBytes = make([]byte, 0)
+				varintBytes = make([]byte, 0)
+				continue
 			}
+			continue
 		}
 
+		if varintLen == 0 {
+			varintLen = int(b)
+			continue
+		}
+
+		buf.WriteByte(b)
+		offset++
+
+		if offset == varintLen {
+			px, pn := proto.DecodeVarint(buf.Next(offset))
+			size = int(px) + pn
+		}
+
+		if offset == size && size != 0 {
+			w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
+			buf.Next(size)
+			offset, varintLen, size, code = 0, 0, 0, 0
+			continue
+		}
 	}
+
 }
 
 func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, buf *bytes.Buffer) {
