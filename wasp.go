@@ -1,6 +1,7 @@
 package wasp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -31,7 +32,7 @@ type Generater interface {
 type Wasp struct {
 	readTimeout time.Duration
 
-	gen Generater
+	bufferPool *sync.Pool
 
 	connMap sync.Map
 	subMap  *subMap
@@ -40,6 +41,11 @@ type Wasp struct {
 func Default() *Wasp {
 	return &Wasp{
 		readTimeout: readTimeout,
+		bufferPool: &sync.Pool{
+			New: func() interface{} {
+				return new(bytes.Buffer)
+			},
+		},
 		subMap: &subMap{
 			cache: make(map[string]map[string]*TCPConn),
 		},
@@ -78,30 +84,20 @@ func (w *Wasp) Run(addr ...string) error {
 
 }
 
-func (w *Wasp) GenSeq(gen Generater) {
-	w.gen = gen
-}
-
 func (w *Wasp) handle(conn *TCPConn) {
-	body := make([]byte, 4096)
-	buf := &bytes.Buffer{}
-
+	reader := bufio.NewReader(conn)
+	buf := w.bufferPool.Get().(*bytes.Buffer)
 	var (
+		offset,
+		varintLen,
+		size int
 		code byte
-
-		size, varintLen int
 
 		ctx = context.WithValue(context.Background(), _CTXPEER, &peer{})
 	)
+
 	for {
-
-		// set timeout.
-		err := conn.SetReadDeadline(time.Now().Add(w.readTimeout))
-		if err != nil {
-			return
-		}
-
-		n, err := conn.Read(body)
+		b, err := reader.ReadByte()
 		if err != nil {
 			conn.Close()
 			if len(conn.SID()) == 0 {
@@ -114,88 +110,56 @@ func (w *Wasp) handle(conn *TCPConn) {
 			if callback.Callback.Close != nil {
 				callback.Callback.Close(ctx)
 			}
-			return
 		}
 
-		buf.Write(body[:n])
+		if code == 0 {
+			code = b
+			continue
+		}
 
-		for {
-			if buf.Len() == 0 {
-				break
-			}
-			if code == 0 {
-				code = buf.Next(1)[0]
-			}
+		if code == byte(pkg.FIXED_PING) {
+			w.heartbeat(conn)
+			offset, varintLen, size, code = 0, 0, 0, 0
+			continue
+		}
 
-			if code == byte(pkg.FIXED_PING) {
-				w.typeHandle(ctx, conn, pkg.Fixed(code), nil)
-				code = 0
-				continue
-			}
+		if varintLen == 0 {
+			varintLen = int(b)
+			continue
+		}
 
-			if varintLen == 0 {
-				size, varintLen = pkg.DecodeVarint(buf.Bytes())
-				if varintLen < 0 {
-					conn.Close()
-					return
-				}
-				buf.Next(varintLen)
-			}
+		buf.WriteByte(b)
+		offset++
 
-			if size == buf.Len() {
-				if err := w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size)); err != nil {
-					conn.Close()
-					return
-				}
-				size, varintLen = 0, 0
-				code = 0
-				break
-			} else if size < buf.Len() {
-				if err := w.typeHandle(ctx, conn, pkg.Fixed(code), buf.Next(size)); err != nil {
-					conn.Close()
-					return
-				}
-				size, varintLen = 0, 0
-				code = 0
-				continue
-			} else {
-				break
-			}
+		if offset == varintLen {
+			px, pn := proto.DecodeVarint(buf.Next(offset))
+			size = int(px) + pn
+		}
+
+		if offset == size && size != 0 {
+			w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
+			offset, varintLen, size, code = 0, 0, 0, 0
+			buf.Reset()
 		}
 	}
 }
 
-func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, body []byte) error {
+func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, buf *bytes.Buffer) {
 	switch t {
 	case pkg.FIXED_CONNECT:
-		w.connect(ctx, conn, body)
-		return nil
-	case pkg.FIXED_PING:
-		if callback.Callback.Ping != nil {
-			callback.Callback.Ping(conn.SID())
-		}
-		if _, err := conn.Write([]byte{byte(pkg.FIXED_PONG)}); err != nil {
-			conn.Close()
-		}
-		return nil
+		w.connect(ctx, conn, buf)
 	case pkg.FIXED_SUBSCRIBE:
-		w.subHandle(ctx, conn, body)
-		return nil
+		w.subHandle(ctx, conn, buf)
 	case pkg.FIXED_PUBLISH:
-		w.pubHandle(ctx, body)
-		return nil
-	case pkg.FIXED_PUBACK:
-		w.pubAckHandle(ctx, body)
-		return nil
+		w.pubHandle(ctx, conn, buf)
 	default:
 		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
-		return errors.New("Unsupported PkgType")
 	}
 }
 
-func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
+func (w *Wasp) connect(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
 	pb := &corepb.Connect{}
-	if err := proto.Unmarshal(body, pb); err != nil {
+	if err := proto.Unmarshal(buf.Bytes(), pb); err != nil {
 		zap.L().Error(err.Error())
 		return
 	}
@@ -210,7 +174,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		oldConn := v.(*TCPConn)
 		w.connMap.Delete(oldConn.SID())
 		w.subMap.delete(oldConn.SID())
-		zap.L().Warn("Old connection will be closed", zap.String("sid", oldConn.SID()),
+		zap.L().Warn("old connection will be closed", zap.String("sid", oldConn.SID()),
 			zap.String("remote_addr", oldConn.RemoteAddr().String()),
 		)
 
@@ -250,7 +214,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 		return
 	}
 
-	if _, err := conn.Write(pkg.FIXED_CONNACK.Encode(pbBody)); err != nil {
+	if _, err := conn.Write(pkg.ConnAckEncode(pbBody)); err != nil {
 		conn.Close()
 		zap.L().Warn(err.Error())
 		return
@@ -258,12 +222,12 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, body []byte) {
 
 }
 
-func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
-	if len(body) == 0 {
+func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
+	if buf.Len() == 0 {
 		return
 	}
 
-	ts := bytes.Split(body, []byte{'\n'})
+	ts := bytes.Split(buf.Bytes(), []byte{'\n'})
 	for _, v := range ts {
 		if len(v) != 0 {
 			w.subMap.put(string(v), conn.SID(), conn)
@@ -271,7 +235,7 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, body []byte) {
 	}
 
 	if callback.Callback.Subscribe != nil {
-		callback.Callback.Subscribe(ctx, body)
+		callback.Callback.Subscribe(ctx, buf.Bytes())
 	}
 }
 
@@ -279,49 +243,32 @@ var (
 	ErrSubscriberNotFound = errors.New("subscriber not found")
 )
 
-func (w *Wasp) pubHandle(ctx context.Context, body []byte) {
-	topic := string(body[1 : 1+body[0]])
+// for test
+//var i int
 
-	ctx = context.WithValue(ctx, _CTXTOPIC, topic)
-	seq, err := w.gen.Seq(ctx, body[1+body[0]:])
-	if err != nil {
-		return
-	}
+func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
+	topicLen := buf.Next(1)[0]
+	topic := string(buf.Next(int(topicLen)))
 
-	ctx = context.WithValue(ctx, _CTXSEQ, seq)
 	conns := w.subMap.list(topic)
 	if conns == nil {
-		if callback.Callback.PubFail != nil {
-			callback.Callback.PubFail(ctx, body, ErrSubscriberNotFound)
-		}
+		zap.L().Warn("no subscribers")
 		return
 	}
 
-	idbody := append(pkg.EncodeVarint(seq), body...)
-
-	pubBody := pkg.FIXED_PUBLISH.Encode(idbody)
+	// for test
+	//i++
+	//os.WriteFile("./"+fmt.Sprint(i)+".jpeg", buf.Bytes(), os.ModePerm)
 
 	for _, v := range conns {
-		if callback.Callback.PubData != nil {
-			ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
-			callback.Callback.PubData(ctx, pubBody)
-		}
-
-		if _, err := v.Write(pubBody); err != nil {
-			zap.L().Error(err.Error())
-			if callback.Callback.PubFail != nil {
-				ctx = context.WithValue(ctx, _CTXSUBSCRIBER, v.SID())
-				callback.Callback.PubFail(ctx, pubBody, err)
-			}
+		if _, err := v.Write(buf.Bytes()); err != nil {
+			zap.L().Warn(err.Error())
 		}
 	}
 }
 
-func (w *Wasp) pubAckHandle(ctx context.Context, body []byte) {
-	if callback.Callback.PubAck != nil {
-		seq, _ := pkg.DecodeVarint(body)
-		callback.Callback.PubAck(ctx, seq)
-	}
+func (w *Wasp) heartbeat(conn *TCPConn) {
+	conn.Write([]byte{byte(pkg.FIXED_PONG)})
 }
 
 func (w *Wasp) SubConns(topic string) []*TCPConn {
@@ -331,15 +278,10 @@ func (w *Wasp) SubConns(topic string) []*TCPConn {
 type ctxString string
 
 const (
-	_CTXSEQ        ctxString = "ctxSeq"
 	_CTXTOPIC      ctxString = "ctxTopic"
 	_CTXPEER       ctxString = "ctxPeer"
 	_CTXSUBSCRIBER ctxString = "ctxSubscriber"
 )
-
-func CtxSeq(ctx context.Context) int {
-	return ctx.Value(_CTXSEQ).(int)
-}
 
 func CtxPeer(ctx context.Context) *peer {
 	return ctx.Value(_CTXPEER).(*peer)
