@@ -138,23 +138,20 @@ func (w *Wasp) handle(conn *TCPConn) {
 			}
 
 			if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
+				buf.WriteByte(b)
 				if topicLen == 0 {
 					topicLen = int(b)
-					buf.WriteByte(b)
 					continue
 				}
 				if topicLen != len(topicBytes) {
-					buf.WriteByte(b)
 					topicBytes = append(topicBytes, b)
 					continue
 				}
 
 				if varintLen == 0 {
 					varintLen = int(b)
-					buf.WriteByte(b)
 					continue
 				}
-				buf.WriteByte(b)
 				varintBytes = append(varintBytes, b)
 				offset++
 
