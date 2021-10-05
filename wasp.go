@@ -96,13 +96,11 @@ func (w *Wasp) handle(conn *TCPConn) {
 		ctx = context.WithValue(context.Background(), _CTXPEER, &peer{})
 	)
 
+	topicBytes := make([]byte, 0)
+	varintBytes := make([]byte, 0)
 	for {
 		buf := w.bufferPool.Get().(*bytes.Buffer)
-		bufTopic := w.bufferPool.Get().(*bytes.Buffer)
-		bufVarint := w.bufferPool.Get().(*bytes.Buffer)
 		buf.Reset()
-		bufTopic.Reset()
-		bufVarint.Reset()
 		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
 		for {
 			b, err := reader.ReadByte()
@@ -110,8 +108,6 @@ func (w *Wasp) handle(conn *TCPConn) {
 				conn.Close()
 				if len(conn.SID()) == 0 {
 					w.bufferPool.Put(buf)
-					w.bufferPool.Put(bufTopic)
-					w.bufferPool.Put(bufVarint)
 					return
 				}
 
@@ -122,8 +118,6 @@ func (w *Wasp) handle(conn *TCPConn) {
 					callback.Callback.Close(ctx)
 				}
 				w.bufferPool.Put(buf)
-				w.bufferPool.Put(bufTopic)
-				w.bufferPool.Put(bufVarint)
 				return
 			}
 
@@ -134,8 +128,6 @@ func (w *Wasp) handle(conn *TCPConn) {
 					offset, varintLen, size, code = 0, 0, 0, 0
 					buf.Reset()
 					w.bufferPool.Put(buf)
-					w.bufferPool.Put(bufTopic)
-					w.bufferPool.Put(bufVarint)
 					break
 				} else if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
 					buf.WriteByte(b)
@@ -151,9 +143,9 @@ func (w *Wasp) handle(conn *TCPConn) {
 					buf.WriteByte(b)
 					continue
 				}
-				if topicLen != bufTopic.Len() {
+				if topicLen != len(topicBytes) {
 					buf.WriteByte(b)
-					bufTopic.WriteByte(b)
+					topicBytes = append(topicBytes, b)
 					continue
 				}
 
@@ -163,22 +155,21 @@ func (w *Wasp) handle(conn *TCPConn) {
 					continue
 				}
 				buf.WriteByte(b)
-				bufVarint.WriteByte(b)
+				varintBytes = append(varintBytes, b)
 				offset++
 
 				if offset == varintLen {
-					px, pn := proto.DecodeVarint(bufVarint.Bytes())
+					px, pn := proto.DecodeVarint(varintBytes)
 					size = int(px) + pn
 				}
 				if offset == size && size != 0 {
-					w.pubHandle(ctx, conn, string(bufTopic.Bytes()), buf)
+					w.pubHandle(ctx, conn, string(topicBytes), buf)
 					offset, varintLen, size, code, topicLen = 0, 0, 0, 0, 0
 					buf.Reset()
-					bufTopic.Reset()
-					bufVarint.Reset()
+					topicBytes = make([]byte, 0)
+					varintBytes = make([]byte, 0)
 					w.bufferPool.Put(buf)
-					w.bufferPool.Put(bufTopic)
-					w.bufferPool.Put(bufVarint)
+					break
 				}
 				continue
 			}
