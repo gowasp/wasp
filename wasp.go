@@ -86,8 +86,6 @@ func (w *Wasp) Run(addr ...string) error {
 
 func (w *Wasp) handle(conn *TCPConn) {
 	reader := bufio.NewReader(conn)
-	buf := w.bufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
 	var (
 		offset,
 		varintLen,
@@ -98,50 +96,59 @@ func (w *Wasp) handle(conn *TCPConn) {
 	)
 
 	for {
-		b, err := reader.ReadByte()
-		if err != nil {
-			conn.Close()
-			if len(conn.SID()) == 0 {
+		buf := w.bufferPool.Get().(*bytes.Buffer)
+		buf.Reset()
+		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
+		for {
+			b, err := reader.ReadByte()
+			if err != nil {
+				conn.Close()
+				if len(conn.SID()) == 0 {
+					w.bufferPool.Put(buf)
+					return
+				}
+
+				w.subMap.delete(conn.SID())
+				w.connMap.Delete(conn.SID())
+
+				if callback.Callback.Close != nil {
+					callback.Callback.Close(ctx)
+				}
+				w.bufferPool.Put(buf)
 				return
 			}
 
-			w.subMap.delete(conn.SID())
-			w.connMap.Delete(conn.SID())
-
-			if callback.Callback.Close != nil {
-				callback.Callback.Close(ctx)
+			if code == 0 {
+				code = b
+				if code == byte(pkg.FIXED_PING) {
+					w.heartbeat(conn)
+					offset, varintLen, size, code = 0, 0, 0, 0
+				}
+				w.bufferPool.Put(buf)
+				break
 			}
-			return
-		}
 
-		if code == 0 {
-			code = b
-			if code == byte(pkg.FIXED_PING) {
-				w.heartbeat(conn)
+			if varintLen == 0 {
+				varintLen = int(b)
+				continue
+			}
+
+			buf.WriteByte(b)
+			offset++
+
+			if offset == varintLen {
+				px, pn := proto.DecodeVarint(buf.Next(offset))
+				size = int(px) + pn
+			}
+
+			if offset == size && size != 0 {
+				w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
 				offset, varintLen, size, code = 0, 0, 0, 0
+				buf.Reset()
+				w.bufferPool.Put(buf)
 			}
-			continue
 		}
 
-		if varintLen == 0 {
-			varintLen = int(b)
-			continue
-		}
-
-		buf.WriteByte(b)
-		offset++
-
-		if offset == varintLen {
-			px, pn := proto.DecodeVarint(buf.Next(offset))
-			size = int(px) + pn
-		}
-
-		if offset == size && size != 0 {
-			w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
-			offset, varintLen, size, code = 0, 0, 0, 0
-			buf.Reset()
-			w.bufferPool.Put(buf)
-		}
 	}
 }
 
