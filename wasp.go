@@ -207,7 +207,7 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, buf *
 	case pkg.FIXED_SUBSCRIBE:
 		w.subHandle(ctx, conn, buf)
 	default:
-		zap.L().Error("Unsupported PkgType " + fmt.Sprint(t))
+		zap.S().Errorf("Unsupported PkgType: %s, sid: %s, remote_addr: %s", fmt.Sprint(t), conn.SID(), conn.RemoteAddr().String())
 	}
 }
 
