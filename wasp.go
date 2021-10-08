@@ -89,15 +89,12 @@ func (w *Wasp) handle(conn *TCPConn) {
 	var (
 		offset,
 		varintLen,
-		topicLen,
 		size int
 		code byte
 
 		ctx = context.WithValue(context.Background(), _CTXPEER, &peer{})
 	)
 
-	topicBytes := make([]byte, 0)
-	varintBytes := make([]byte, 0)
 	buf := w.bufferPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	for {
@@ -130,69 +127,30 @@ func (w *Wasp) handle(conn *TCPConn) {
 			return
 		}
 
+		buf.WriteByte(b)
+		offset++
 		if code == 0 {
 			code = b
 			if pkg.Fixed(code) == pkg.FIXED_PING {
 				w.heartbeat(conn)
 				offset, varintLen, size, code = 0, 0, 0, 0
-				continue
-			} else if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
-				buf.WriteByte(b)
-				continue
-			} else {
-				continue
-			}
-		}
-
-		if pkg.Fixed(code) == pkg.FIXED_PUBLISH {
-			buf.WriteByte(b)
-			if topicLen == 0 {
-				topicLen = int(b)
-				continue
-			}
-			if topicLen != len(topicBytes) {
-				topicBytes = append(topicBytes, b)
-				continue
-			}
-
-			if varintLen == 0 {
-				varintLen = int(b)
-				continue
-			}
-			varintBytes = append(varintBytes, b)
-			offset++
-
-			if offset == varintLen {
-				px, pn := proto.DecodeVarint(varintBytes)
-				size = int(px) + pn
-			}
-			if offset == size && size != 0 {
-				w.pubHandle(ctx, conn, string(topicBytes), buf)
-				offset, varintLen, size, code, topicLen = 0, 0, 0, 0, 0
-				buf.Next(buf.Len())
-				topicBytes = make([]byte, 0)
-				varintBytes = make([]byte, 0)
-				continue
+				buf.Reset()
 			}
 			continue
 		}
-
 		if varintLen == 0 {
-			varintLen = int(b)
+			px, pn := pkg.DecodeVarint(buf.Bytes()[1:])
+			size = int(px) + pn
+			if size == 0 {
+				continue
+			}
+			varintLen = pn
 			continue
 		}
 
-		buf.WriteByte(b)
-		offset++
-
-		if offset == varintLen {
-			px, pn := proto.DecodeVarint(buf.Next(offset))
-			size = int(px) + pn
-		}
-
-		if offset == size && size != 0 {
-			w.typeHandle(ctx, conn, pkg.Fixed(code), buf)
-			buf.Next(size)
+		if offset == size+1 && size != 0 {
+			w.typeHandle(ctx, conn, pkg.Fixed(code), varintLen, buf)
+			buf.Reset()
 			offset, varintLen, size, code = 0, 0, 0, 0
 			continue
 		}
@@ -200,20 +158,22 @@ func (w *Wasp) handle(conn *TCPConn) {
 
 }
 
-func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, buf *bytes.Buffer) {
+func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, varintLen int, buf *bytes.Buffer) {
 	switch t {
 	case pkg.FIXED_CONNECT:
-		w.connect(ctx, conn, buf)
+		w.connect(ctx, conn, varintLen, buf)
 	case pkg.FIXED_SUBSCRIBE:
-		w.subHandle(ctx, conn, buf)
+		w.subHandle(ctx, conn, varintLen, buf)
+	case pkg.FIXED_PUBLISH:
+		w.pubHandle(ctx, conn, varintLen, buf)
 	default:
 		zap.S().Errorf("Unsupported PkgType: %s, sid: %s, remote_addr: %s", fmt.Sprint(t), conn.SID(), conn.RemoteAddr().String())
 	}
 }
 
-func (w *Wasp) connect(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
+func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	pb := &corepb.Connect{}
-	if err := proto.Unmarshal(buf.Bytes(), pb); err != nil {
+	if err := proto.Unmarshal(buf.Bytes()[1+varintLen:], pb); err != nil {
 		zap.L().Error(err.Error())
 		return
 	}
@@ -270,12 +230,12 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
 
 }
 
-func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, buf *bytes.Buffer) {
+func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	if buf.Len() == 0 {
 		return
 	}
 
-	ts := bytes.Split(buf.Bytes(), []byte{'\n'})
+	ts := bytes.Split(buf.Bytes()[1+varintLen:], []byte{'\n'})
 	for _, v := range ts {
 		if len(v) != 0 {
 			w.subMap.put(string(v), conn.SID(), conn)
@@ -294,8 +254,10 @@ var (
 // for test
 //var i int
 
-func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, topic string, buf *bytes.Buffer) {
-	conns := w.subMap.list(topic)
+func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
+	tl := buf.Bytes()[2+varintLen]
+	topic := string(buf.Bytes()[3+varintLen : 3+varintLen+int(tl)])
+	conns := w.subMap.list(string(topic))
 	if conns == nil {
 		zap.L().Warn("no subscribers")
 		return
