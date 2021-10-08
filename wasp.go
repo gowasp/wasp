@@ -231,10 +231,6 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 }
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
-	if buf.Len() == 0 {
-		return
-	}
-
 	ts := bytes.Split(buf.Bytes()[1+varintLen:], []byte{'\n'})
 	for _, v := range ts {
 		if len(v) != 0 {

@@ -92,7 +92,7 @@ func TestWasp_subHandle(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	topic := "a/b\na/c\nb/b"
-	conn.Write(pkg.FIXED_CONNECT.Encode([]byte(topic)))
+	conn.Write(pkg.FIXED_SUBSCRIBE.Encode([]byte(topic)))
 	select {}
 
 }
