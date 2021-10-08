@@ -232,14 +232,16 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	ts := bytes.Split(buf.Bytes()[1+varintLen:], []byte{'\n'})
+	strTopics := make([]string, 0)
 	for _, v := range ts {
 		if len(v) != 0 {
 			w.subMap.put(string(v), conn.SID(), conn)
+			strTopics = append(strTopics, string(v))
 		}
 	}
 
 	if callback.Callback.Subscribe != nil {
-		callback.Callback.Subscribe(ctx, buf.Bytes())
+		callback.Callback.Subscribe(ctx, strTopics)
 	}
 }
 

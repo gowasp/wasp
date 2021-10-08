@@ -1,8 +1,6 @@
 package wasp
 
 import (
-	"bytes"
-	"context"
 	"io"
 	"net"
 	"net/http"
@@ -57,12 +55,6 @@ func TestWasp_Publish(t *testing.T) {
 		zap.L().Debug(s)
 	}
 
-	callback.Callback.Subscribe = func(c context.Context, b []byte) {
-		d := bytes.Split(b, []byte{'\n'})
-		for _, v := range d {
-			zap.L().Debug(string(v))
-		}
-	}
 	Default().Run()
 }
 

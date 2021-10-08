@@ -12,7 +12,7 @@ type callback struct {
 	Connect   func(context.Context, *corepb.Connect) error
 	Close     func(context.Context) error
 	Ping      func(string)
-	Subscribe func(context.Context, []byte)
+	Subscribe func(context.Context, []string)
 	PubData   func(context.Context, []byte)
 	PubFail   func(context.Context, []byte, error)
 	PubAck    func(context.Context, int)
