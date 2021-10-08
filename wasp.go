@@ -251,9 +251,6 @@ var (
 	ErrSubscriberNotFound = errors.New("subscriber not found")
 )
 
-// for test
-//var i int
-
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	tl := buf.Bytes()[2+varintLen]
 	topic := string(buf.Bytes()[3+varintLen : 3+varintLen+int(tl)])
