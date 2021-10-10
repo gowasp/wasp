@@ -155,7 +155,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 				w.typeHandle(ctx, conn, pkg.Fixed(code), varintLen, buf)
 				w.bufferPool.Put(buf)
 				offset, varintLen, size, code = 0, 0, 0, 0
-				continue
+				break
 			}
 
 		}
