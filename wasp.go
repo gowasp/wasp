@@ -135,6 +135,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 				w.heartbeat(conn)
 				offset, varintLen, size, code = 0, 0, 0, 0
 				buf.Reset()
+				w.bufferPool.Put(buf)
 			}
 			continue
 		}
@@ -151,6 +152,7 @@ func (w *Wasp) handle(conn *TCPConn) {
 		if offset == size+1 && size != 0 {
 			w.typeHandle(ctx, conn, pkg.Fixed(code), varintLen, buf)
 			buf.Reset()
+			w.bufferPool.Put(buf)
 			offset, varintLen, size, code = 0, 0, 0, 0
 			continue
 		}
