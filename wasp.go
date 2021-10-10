@@ -87,19 +87,22 @@ func (w *Wasp) Run(addr ...string) error {
 func (w *Wasp) handle(conn *TCPConn) {
 	reader := bufio.NewReader(conn)
 	var (
-		offset,
-		varintLen,
-		size int
-		code byte
-
 		ctx = context.WithValue(context.Background(), _CTXPEER, &peer{})
 	)
 
 	for {
-		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
+		var (
+			offset,
+			varintLen,
+			size int
+			code byte
+		)
 
 		buf := w.bufferPool.Get().(*bytes.Buffer)
 		buf.Reset()
+
+		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
+
 		for {
 			b, err := reader.ReadByte()
 			if err != nil {
@@ -137,7 +140,6 @@ func (w *Wasp) handle(conn *TCPConn) {
 				if pkg.Fixed(code) == pkg.FIXED_PING {
 					w.heartbeat(conn)
 					w.bufferPool.Put(buf)
-					offset, varintLen, size, code = 0, 0, 0, 0
 					break
 				}
 				continue
@@ -154,7 +156,6 @@ func (w *Wasp) handle(conn *TCPConn) {
 			if offset == size+1 && size != 0 {
 				w.typeHandle(ctx, conn, pkg.Fixed(code), varintLen, buf)
 				w.bufferPool.Put(buf)
-				offset, varintLen, size, code = 0, 0, 0, 0
 				break
 			}
 
