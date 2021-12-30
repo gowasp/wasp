@@ -234,6 +234,16 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 		return
 	}
 
+	conns := w.subMap.list("online")
+	if conns == nil {
+		zap.L().Warn("no subscribers")
+		return
+	}
+	for _, v := range conns {
+		if _, err := v.Write(buf.Bytes()); err != nil {
+			zap.L().Warn(err.Error())
+		}
+	}
 }
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
