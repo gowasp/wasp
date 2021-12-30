@@ -173,7 +173,8 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, varin
 
 func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	pb := &corepb.Connect{}
-	if err := proto.Unmarshal(buf.Bytes()[1+varintLen:], pb); err != nil {
+	connbody := buf.Bytes()[1+varintLen:]
+	if err := proto.Unmarshal(connbody, pb); err != nil {
 		zap.L().Error(err.Error())
 		return
 	}
@@ -228,6 +229,16 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 		return
 	}
 
+	conns := w.subMap.list("online")
+	if conns == nil {
+		return
+	}
+
+	for _, v := range conns {
+		if _, err := v.Write(connbody); err != nil {
+			zap.L().Warn(err.Error())
+		}
+	}
 }
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
