@@ -87,72 +87,78 @@ func (w *Wasp) Run(addr ...string) error {
 func (w *Wasp) handle(conn *TCPConn) {
 	reader := bufio.NewReader(conn)
 	var (
-		offset,
-		varintLen,
-		size int
-		code byte
-
 		ctx = context.WithValue(context.Background(), _CTXPEER, &peer{})
 	)
 
-	buf := w.bufferPool.Get().(*bytes.Buffer)
-	buf.Reset()
 	for {
+		var (
+			offset,
+			varintLen,
+			size int
+			code byte
+		)
+
+		buf := w.bufferPool.Get().(*bytes.Buffer)
+		buf.Reset()
+
 		conn.SetReadDeadline(time.Now().Add(w.readTimeout))
-		b, err := reader.ReadByte()
-		if err != nil {
-			zap.L().Warn(conn.SID() + ": " + err.Error())
-			conn.Close()
 
-			if conn.SID() == "" {
+		for {
+			b, err := reader.ReadByte()
+			if err != nil {
+				w.bufferPool.Put(buf)
+
+				zap.L().Warn(conn.SID() + ": " + err.Error())
+				conn.Close()
+
+				if conn.SID() == "" {
+					return
+				}
+
+				mapConn, ok := w.connMap.Load(conn.SID())
+				if !ok {
+					return
+				}
+
+				if conn.connectTime < mapConn.(*TCPConn).connectTime {
+					return
+				} else {
+					w.connMap.Delete(conn.SID())
+				}
+
+				if callback.Callback.Close != nil {
+					callback.Callback.Close(ctx)
+				}
 				return
 			}
 
-			mapConn, ok := w.connMap.Load(conn.SID())
-			if !ok {
-				return
-			}
+			buf.WriteByte(b)
+			offset++
 
-			if conn.connectTime < mapConn.(*TCPConn).connectTime {
-				return
-			} else {
-				w.connMap.Delete(conn.SID())
-			}
-
-			if callback.Callback.Close != nil {
-				callback.Callback.Close(ctx)
-			}
-			buf.Reset()
-			w.bufferPool.Put(buf)
-			return
-		}
-
-		buf.WriteByte(b)
-		offset++
-		if code == 0 {
-			code = b
-			if pkg.Fixed(code) == pkg.FIXED_PING {
-				w.heartbeat(conn)
-				offset, varintLen, size, code = 0, 0, 0, 0
-				buf.Reset()
-			}
-			continue
-		}
-		if varintLen == 0 {
-			px, pn := pkg.DecodeVarint(buf.Bytes()[1:])
-			size = int(px) + pn
-			if size == 0 {
+			if code == 0 {
+				code = b
+				if pkg.Fixed(code) == pkg.FIXED_PING {
+					w.heartbeat(conn)
+					w.bufferPool.Put(buf)
+					break
+				}
 				continue
 			}
-			varintLen = pn
-			continue
-		}
+			if varintLen == 0 {
+				px, pn := pkg.DecodeVarint(buf.Bytes()[1:])
+				size = int(px) + pn
+				if size != 0 {
+					varintLen = pn
+				}
+				continue
+			}
 
-		if offset == size+1 && size != 0 {
-			w.typeHandle(ctx, conn, pkg.Fixed(code), varintLen, buf)
-			buf.Reset()
-			offset, varintLen, size, code = 0, 0, 0, 0
-			continue
+			if offset == size+1 && size != 0 {
+				w.typeHandle(ctx, conn, pkg.Fixed(code), varintLen, buf)
+				w.bufferPool.Put(buf)
+				break
+			}
+
 		}
 	}
 
