@@ -194,9 +194,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 	if v, ok := w.connMap.Load(pb.GetUdid()); ok {
 		w.connMap.Delete(pb.GetUdid())
 		zap.L().Warn("old connection will be closed")
-		if conn, ok := v.(*TCPConn); ok {
-			conn.Close()
-		}
+		v.(*TCPConn).Close()
 	}
 
 	conn.sid = pb.GetUdid()
