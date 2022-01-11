@@ -270,9 +270,9 @@ var (
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	tl := buf.Bytes()[1+varintLen]
 	topic := string(buf.Bytes()[2+varintLen : 2+varintLen+int(tl)])
-	conns := w.subMap.list(string(topic))
+	conns := w.subMap.list(topic)
 	if conns == nil {
-		zap.L().Warn("no subscribers")
+		zap.L().Warn("no subscribers: " + topic)
 		return
 	}
 
