@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -193,7 +192,7 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 
 	if v, ok := w.connMap.Load(pb.GetUdid()); ok {
 		w.connMap.Delete(pb.GetUdid())
-		zap.L().Warn("old connection will be closed")
+		zap.L().Warn("old connection will be closed", zap.String("group", pb.Group), zap.String("udid", pb.Udid))
 		v.(*TCPConn).Close()
 	}
 
@@ -252,16 +251,12 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf 
 	}
 }
 
-var (
-	ErrSubscriberNotFound = errors.New("subscriber not found")
-)
-
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	tl := buf.Bytes()[1+varintLen]
 	topic := string(buf.Bytes()[2+varintLen : 2+varintLen+int(tl)])
 	conns := w.subMap.list(topic)
 	if conns == nil {
-		zap.L().Warn("no subscribers: " + topic)
+		zap.L().Warn("subscriber not found: " + topic)
 		return
 	}
 
