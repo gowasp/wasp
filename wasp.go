@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -179,7 +178,8 @@ func (w *Wasp) typeHandle(ctx context.Context, conn *TCPConn, t pkg.Fixed, varin
 
 func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	pb := &corepb.Connect{}
-	if err := proto.Unmarshal(buf.Bytes()[1+varintLen:], pb); err != nil {
+	connbody := buf.Bytes()[1+varintLen:]
+	if err := proto.Unmarshal(connbody, pb); err != nil {
 		zap.L().Error(err.Error())
 		return
 	}
@@ -190,9 +190,10 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 		return
 	}
 
-	if _, ok := w.connMap.Load(pb.GetUdid()); ok {
+	if v, ok := w.connMap.Load(pb.GetUdid()); ok {
 		w.connMap.Delete(pb.GetUdid())
-		zap.L().Warn("old connection will be closed")
+		zap.L().Warn("old connection will be closed", zap.String("group", pb.Group), zap.String("udid", pb.Udid))
+		v.(*TCPConn).Close()
 	}
 
 	conn.sid = pb.GetUdid()
@@ -233,17 +234,6 @@ func (w *Wasp) connect(ctx context.Context, conn *TCPConn, varintLen int, buf *b
 		zap.L().Warn(err.Error())
 		return
 	}
-
-	conns := w.subMap.list("online")
-	if conns == nil {
-		zap.L().Warn("no subscribers")
-		return
-	}
-	for _, v := range conns {
-		if _, err := v.Write(buf.Bytes()); err != nil {
-			zap.L().Warn(err.Error())
-		}
-	}
 }
 
 func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
@@ -261,16 +251,12 @@ func (w *Wasp) subHandle(ctx context.Context, conn *TCPConn, varintLen int, buf 
 	}
 }
 
-var (
-	ErrSubscriberNotFound = errors.New("subscriber not found")
-)
-
 func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, varintLen int, buf *bytes.Buffer) {
 	tl := buf.Bytes()[1+varintLen]
 	topic := string(buf.Bytes()[2+varintLen : 2+varintLen+int(tl)])
-	conns := w.subMap.list(string(topic))
+	conns := w.subMap.list(topic)
 	if conns == nil {
-		zap.L().Warn("no subscribers")
+		zap.L().Warn("subscriber not found: " + topic)
 		return
 	}
 
