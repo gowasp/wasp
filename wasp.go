@@ -278,9 +278,9 @@ func (w *Wasp) SubConns(topic string) []*TCPConn {
 type ctxString string
 
 const (
-	_CTXTOPIC      ctxString = "ctxTopic"
-	_CTXPEER       ctxString = "ctxPeer"
-	_CTXSUBSCRIBER ctxString = "ctxSubscriber"
+	_CTXTOPIC      ctxString = "topic"
+	_CTXPEER       ctxString = "peer"
+	_CTXSUBSCRIBER ctxString = "subscriber"
 )
 
 func CtxPeer(ctx context.Context) *peer {
