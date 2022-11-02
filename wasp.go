@@ -268,7 +268,7 @@ func (w *Wasp) pubHandle(ctx context.Context, conn *TCPConn, varintLen int, buf 
 }
 
 func (w *Wasp) heartbeat(conn *TCPConn) {
-	conn.Write([]byte{byte(pkg.FIXED_PONG)})
+	conn.Write(pkg.FIXED_PONG.Encode(pkg.EncodeVarint(int(time.Now().Unix()))))
 }
 
 func (w *Wasp) SubConns(topic string) []*TCPConn {
